@@ -1,0 +1,32 @@
+* Initialization
+https://www.learncpp.com/cpp-tutorial/variable-assignment-and-initialization/
+
+Prefer list or value initialization.
+
+#+begin_src cpp
+int a;         // no initializer                            (default initialization)
+int b = 5;     // initial value after equals sign           (copy initialization)
+int c( 6 );    // initial value in parenthesis              (direct initialization)
+
+// List initialization methods                              (C++11) (preferred)
+int d { 7 };   // initial value in braces                   (direct list initialization)
+int e = { 8 }; // initial value in braces after equals sign (copy list initialization)
+int f {};      // initializer is empty braces               (value initialization)
+#+end_src
+
+** multiple init
+#+begin_src cpp
+int a = 5, b = 6;          // copy initialization
+int c( 7 ), d( 8 );        // direct initialization
+int e { 9 }, f { 10 };     // direct brace initialization
+int g = { 9 }, h = { 10 }; // copy brace initialization
+int i {}, j {};            // value initialization
+#+end_src
+
+use [[maybe_unused]​] attribute to avoid error, via abbrev.
+
+* iostream
+Prefer \n over std::endl when outputting text to the console.
+
+* Next
+https://www.learncpp.com/cpp-tutorial/uninitialized-variables-and-undefined-behavior/

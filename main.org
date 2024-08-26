@@ -29,4 +29,4 @@ use [[maybe_unused]​] attribute to avoid error, via abbrev.
 Prefer \n over std::endl when outputting text to the console.
 
 * Next
-https://www.learncpp.com/cpp-tutorial/introduction-to-expressions/
+https://www.learncpp.com/cpp-tutorial/introduction-to-functions/

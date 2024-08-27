@@ -23,9 +23,10 @@ default_compile := $(CXX) $(CXXFLAGS)
 
 cur:
 	file=$$(emacsclient -e "(file-relative-name (buffer-local-value 'buffer-file-name (window-buffer (selected-window))))") && \
-	nosuffix=$${file:1:-5} && \
-	$(default_compile) -o $${nosuffix}$(suffix) $${nosuffix}.cpp && \
-	emacsclient -e "(kill-new (expand-file-name (string-replace \".cpp\" \"$(suffix)\" $${file})))"
+	nosuffix=$${file:1:-6} && \
+	outfile=$${nosuffix}$(suffix) && \
+	$(default_compile) -o $${outfile} $${nosuffix}*.cpp && \
+	emacsclient -e "(kill-new (expand-file-name \"$${outfile}\"))"
 
 clean:
 	$(clean_CMD)

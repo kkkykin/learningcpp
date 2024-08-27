@@ -50,5 +50,16 @@ void doSomething(int /*count*/)
 }
 #+end_src
 
+** Define variable
+Define your local variables as close to their first use as reasonable.
+
+** Preprocessor
+The entire process of preprocessing, compiling, and linking is called translation.
+
+Preprocessor doesn’t understand C++ concepts.
+
+Directives are only valid from the point of definition to the end of the file in which they are defined. Directives defined in one file do not have any impact on other files (unless they are #included into another file).
+
+
 * Next
-https://www.learncpp.com/cpp-tutorial/introduction-to-local-scope/
+https://www.learncpp.com/cpp-tutorial/header-files/

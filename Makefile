@@ -4,7 +4,7 @@ ifeq ($(OS),Windows_NT)     # is Windows_NT on XP, 2000, 7, Vista, 10...
 	clean_CMD := fd -g *$(suffix) -X rm
 else
 	detected_OS := $(shell uname)  # same as "uname -s"
-	clean_CMD := find . -name .git -prune , -type f -executable -exec rm {} \;
+	clean_CMD := find . -name .git -prune , \( -type f -executable -o -name .gdb_history \) -exec rm {} \;
 endif
 
 debug := -ggdb

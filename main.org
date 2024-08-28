@@ -205,5 +205,87 @@ The first draft of a feature (or program) is rarely good. Furthermore, programs 
 **** Optimize for maintainability, not performance
 There is a famous quote (by Donald Knuth) that says “premature optimization is the root of all evil”. New programmers often spend far too much time thinking about how to micro-optimize their code (e.g. trying to figure out which of 2 statements is faster). This rarely matters. Most performance benefits come from good program structure, using the right tools and capabilities for the problem at hand, and following best practices. Additional time should be used to improve the maintainability of your code. Find redundancy and remove it. Split up long functions into shorter ones. Replace awkward or hard to use code with something better. The end result will be code that is easier to improve and optimize later (after you’ve determined where optimization is actually needed) and fewer bugs.
 
+
+
+** Debug
+*** Step
+1. Find the root cause of the problem (usually the line of code that’s not working).
+2. Ensure you understand why the issue is occurring.
+3. Determine how you’ll fix the issue.
+4. Repair the issue causing the problem.
+5. Retest to ensure the problem has been fixed.
+6. Retest to ensure no new problems have emerged.
+
+*** Tactic
+
+**** std::cerr instead of std::cout when debugging
+cerr is unbufferd.
+
+**** Debug with preprocessor
+#+begin_src cpp
+#include <iostream>
+
+#define ENABLE_DEBUG // comment out to disable debugging, or define in header file
+
+int getUserInput()
+{
+#ifdef ENABLE_DEBUG
+std::cerr << "getUserInput() called\n";
+#endif
+	std::cout << "Enter a number: ";
+	int x{};
+	std::cin >> x;
+	return x;
+}
+
+int main()
+{
+#ifdef ENABLE_DEBUG
+std::cerr << "main() called\n";
+#endif
+    int x{ getUserInput() };
+    std::cout << "You entered: " << x << '\n';
+
+    return 0;
+}
+#+end_src
+
+**** Logger
+Such as spdlog or plog.
+
+*** Refactor
+Ideally, a function should be less than ten lines. Functions that are less than five lines are even better.
+
+Remember that the goal here is to maximize comprehension and maintainability, not to minimize function length -- abandoning best practices or using obscure coding techniques to save a line or two doesn’t do your code any favors.
+
+*** Defensive programming
+Defensive programming is a practice whereby the programmer tries to anticipate all of the ways the software could be misused, either by end-users, or by other developers (including the programmer themselves) using the code. These misuses can often be detected and then mitigated (e.g. by asking a user who entered bad input to try again).
+
+*** unit testing
+#+begin_src cpp
+#include <iostream>
+
+int add(int x, int y)
+{
+	return x + y;
+}
+
+void testadd()
+{
+	std::cout << "This function should print: 2 0 0 -2\n";
+	std::cout << add(1, 1) << ' ';
+	std::cout << add(-1, 1) << ' ';
+	std::cout << add(1, -1) << ' ';
+	std::cout << add(-1, -1) << ' ';
+}
+
+int main()
+{
+	testadd();
+
+	return 0;
+}
+#+end_src
+
 * Next
-https://www.learncpp.com/cpp-tutorial/syntax-and-semantic-errors/
+https://www.learncpp.com/cpp-tutorial/introduction-to-fundamental-data-types/

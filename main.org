@@ -207,8 +207,8 @@ There is a famous quote (by Donald Knuth) that says “premature optimization is
 
 
 
-** Debug
-*** Step
+* Debug
+** Step
 1. Find the root cause of the problem (usually the line of code that’s not working).
 2. Ensure you understand why the issue is occurring.
 3. Determine how you’ll fix the issue.
@@ -216,12 +216,12 @@ There is a famous quote (by Donald Knuth) that says “premature optimization is
 5. Retest to ensure the problem has been fixed.
 6. Retest to ensure no new problems have emerged.
 
-*** Tactic
+** Tactic
 
-**** std::cerr instead of std::cout when debugging
+*** std::cerr instead of std::cout when debugging
 cerr is unbufferd.
 
-**** Debug with preprocessor
+*** Debug with preprocessor
 #+begin_src cpp
 #include <iostream>
 
@@ -250,18 +250,18 @@ std::cerr << "main() called\n";
 }
 #+end_src
 
-**** Logger
+*** Logger
 Such as spdlog or plog.
 
-*** Refactor
+** Refactor
 Ideally, a function should be less than ten lines. Functions that are less than five lines are even better.
 
 Remember that the goal here is to maximize comprehension and maintainability, not to minimize function length -- abandoning best practices or using obscure coding techniques to save a line or two doesn’t do your code any favors.
 
-*** Defensive programming
+** Defensive programming
 Defensive programming is a practice whereby the programmer tries to anticipate all of the ways the software could be misused, either by end-users, or by other developers (including the programmer themselves) using the code. These misuses can often be detected and then mitigated (e.g. by asking a user who entered bad input to try again).
 
-*** unit testing
+** unit testing
 #+begin_src cpp
 #include <iostream>
 

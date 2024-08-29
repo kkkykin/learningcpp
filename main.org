@@ -1,3 +1,5 @@
+#+PROPERTY: header-args:cpp :results output :includes <iostream> :flags -ggdb -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -Werror -std=c++2b
+
 * Basic
 ** Initialization
 https://www.learncpp.com/cpp-tutorial/variable-assignment-and-initialization/
@@ -341,6 +343,172 @@ std::size_t is an alias for an implementation-defined unsigned integral type. It
 
 If you use std::size_t explicitly in your code, #include one of the headers that defines std::size_t (we recommend <cstddef>).
 Using sizeof does not require a header (even though it return a value whose type is std::size_t).
+** Flost
+Prefer: double > float > long float
+
+#+begin_src cpp
+int a { 5 };      // 5 means integer
+double b { 5.0 }; // 5.0 is a floating point literal (no suffix means double type by default)
+float c { 5.0f }; // 5.0 is a floating point literal, f suffix means float type
+
+int d { 0 }       // 0 is an integer
+double e { 0.0 }  // 0.0 is a double
+#+end_src
+Note that by default, floating point literals default to type double. An f suffix is used to denote a literal of type float.
+
+Always make sure the type of your literals match the type of the variables they’re being assigned to or used to initialize. Otherwise an unnecessary conversion will result, possibly with a loss of precision.
+
+*** Maybe auto scientific notation
+#+begin_src cpp
+std::cout << 9.87654321f << '\n';
+std::cout << 987.654321f << '\n';
+std::cout << 987654.321f << '\n';
+std::cout << 9876543.21f << '\n';
+std::cout << 0.0000987654321f << '\n';
+#+end_src
+
+*** default double if not suffix with 'f'
+#+begin_src cpp :includes '(<iostream> <iomanip>)
+std::cout << std::setprecision(17); // show 17 digits of precision
+std::cout << 3.33333333333333333333333333333333333333f <<'\n'; // f suffix means float
+std::cout << 3.33333333333333333333333333333333333333 << '\n'; // no suffix means double
+#+end_src
+
+*** Precision issues don’t just impact fractional numbers
+#+begin_src cpp :includes '(<iostream> <iomanip>)
+float f { 123456789.0f }; // f has 10 significant digits
+std::cout << std::setprecision(9); // to show 9 digits in f
+std::cout << f << '\n';
+#+end_src
+
+*** Be wary of using floating point numbers for financial or currency data.
+#+begin_src cpp :includes '(<iostream> <iomanip>)
+std::cout << std::setprecision(17);
+
+double d1{ 1.0 };
+std::cout << d1 << '\n';
+
+double d2{ 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 + 0.1 }; // should equal 1.0
+std::cout << d2 << '\n';
+#+end_src
+
+*** NaN and Inf
+Avoid division by 0.0 altogether, even if your compiler supports it.
+#+begin_src cpp
+double zero {0.0};
+double posinf { 5.0 / zero }; // positive infinity
+std::cout << posinf << '\n';
+
+double neginf { -5.0 / zero }; // negative infinity
+std::cout << neginf << '\n';
+
+double nan { zero / zero }; // not a number (mathematically invalid)
+std::cout << nan << '\n';
+#+end_src
+
+** Boolean
+#+begin_src cpp
+bool b1 { true };
+bool b2 { false };
+b1 = false;
+bool b3 {}; // default initialize to false
+bool b1 { !true }; // b1 will be initialized with the value false
+bool b2 { !false }; // b2 will be initialized with the value true
+#+end_src
+
+*** Stored as integer
+#+begin_src cpp
+std::cout << true << '\n'; // true evaluates to 1
+std::cout << !true << '\n'; // !true evaluates to 0
+
+bool b {false};
+std::cout << b << '\n'; // b is false, which evaluates to 0
+std::cout << !b << '\n'; // !b is true, which evaluates to 1
+#+end_src
+
+*** Boolalpha
+#+begin_src cpp
+std::cout << true << '\n';
+std::cout << false << '\n';
+
+std::cout << std::boolalpha; // print bools as true or false
+// std::cout << std::noboolalpha; // turn it back
+
+std::cout << true << '\n';
+std::cout << false << '\n';
+#+end_src
+
+*** Integer to Boolean conversion
+#+begin_src cpp
+bool bFalse { 0 }; // okay: initialized to false
+bool bTrue  { 1 }; // okay: initialized to true
+bool bNo    { 2 }; // error: narrowing conversions disallowed
+
+std::cout << bFalse << bTrue << bNo << '\n';
+#+end_src
+
+but copy init works.
+#+begin_src cpp
+std::cout << std::boolalpha; // print bools as true or false
+
+bool b1 = 4 ; // copy initialization allows implicit conversion from int to bool
+std::cout << b1 << '\n';
+
+bool b2 = 0 ; // copy initialization allows implicit conversion from int to bool
+std::cout << b2 << '\n';
+#+end_src
+
+*** Inputting Boolean values
+#+begin_src cpp :eval no
+bool b{}; // default initialize to false
+std::cout << "Enter a boolean value: ";
+std::cin >> b;
+std::cout << "You entered: " << b << '\n';
+#+end_src
+
+Only accept 0 or 1; if not enable 'std::boolalpha'.
+Enabling std::boolalpha for input will only allow lower-cased false or true to be accepted. Variations with capital letters will not be accepted. 0 and 1 will also no longer be accepted.
+#+begin_src cpp :eval no
+bool b{};
+std::cout << "Enter a boolean value: ";
+
+// Allow the user to input 'true' or 'false' for boolean values
+// This is case-sensitive, so True or TRUE will not work
+std::cin >> std::boolalpha;
+std::cin >> b;
+
+// Let's also output bool values as `true` or `false`
+std::cout << std::boolalpha;
+std::cout << "You entered: " << b << '\n';
+#+end_src
+
+*** Return value
+retrun true or false.
+#+begin_src cpp :eval no :main no
+// returns true if x and y are equal, false otherwise
+bool isEqual(int x, int y)
+{
+    return x == y; // operator== returns true if x equals y, and false otherwise
+}
+
+int main()
+{
+    std::cout << "Enter an integer: ";
+    int x{};
+    std::cin >> x;
+
+    std::cout << "Enter another integer: ";
+    int y{};
+    std::cin >> y;
+
+    std::cout << std::boolalpha; // print bools as true or false
+
+    std::cout << x << " and " << y << " are equal? ";
+    std::cout << isEqual(x, y) << '\n'; // will return true or false
+
+    return 0;
+}
+#+end_src
 
 * Next
-https://www.learncpp.com/cpp-tutorial/introduction-to-scientific-notation/
+https://www.learncpp.com/cpp-tutorial/introduction-to-if-statements/

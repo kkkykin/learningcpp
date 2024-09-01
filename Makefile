@@ -10,12 +10,13 @@ endif
 debug := -ggdb
 disable_extension := -pedantic-errors
 warn_level := -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion
+warn_shadow := -Wshadow
 warn_as_error := -Werror
 std_26 := -std=c++2c
 std_23 := -std=c++2b
 
 CXX = g++
-CXXFLAGS = $(debug) $(disable_extension) $(warn_level) $(warn_as_error) $(std_23)
+CXXFLAGS = $(debug) $(disable_extension) $(warn_level) $(warn_shadow) $(warn_as_error) $(std_23)
 
 default_compile := $(CXX) $(CXXFLAGS)
 

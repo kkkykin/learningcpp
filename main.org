@@ -1,4 +1,4 @@
-#+PROPERTY: header-args:cpp :results output :includes <iostream> :flags -ggdb -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -Werror -std=c++2b
+#+PROPERTY: header-args:cpp :results output :includes <iostream> :flags -ggdb -pedantic-errors -Wall -Weffc++ -Wextra -Wconversion -Wsign-conversion -Wshadow -Werror -std=c++2b
 
 * Basic
 ** Initialization
@@ -506,7 +506,7 @@ int main()
     std::cout << x << " and " << y << " are equal? ";
     std::cout << isEqual(x, y) << '\n'; // will return true or false
 ** Char
-Avoid multicharacter literals (e.g. '56').
+Avoid militarist literals (e.g. '56').
 *** Other char type
 wchar_t should be avoided in almost all cases (except when interfacing with the Windows API).
 
@@ -921,5 +921,798 @@ sv = s;                    // revalidate sv: sv is now viewing s again
 std::cout << sv << '\n';   // prints "Hello, universe!"
 #+end_src
 
+** returning std::string_view
+If an argument is a temporary that is destroyed at the end of the full expression containing the function call, the returned std::string_view must be used immediately, as it will be left dangling after the temporary is destroyed.
+
+** view modification function
+The remove_prefix() member function removes characters from the left side of the view.
+The remove_suffix() member function removes characters from the right side of the view.
+#+begin_src cpp
+#include <iostream>
+#include <string_view>
+
+int main()
+{
+	std::string_view str{ "Peach" };
+	std::cout << str << '\n';
+
+	// Remove 1 character from the left side of the view
+	str.remove_prefix(1);
+	std::cout << str << '\n';
+
+	// Remove 2 characters from the right side of the view
+	str.remove_suffix(2);
+	std::cout << str << '\n';
+
+	str = "Peach"; // reset the view
+	std::cout << str << '\n';
+
+	return 0;
+}
+#+end_src
+
+** null-terminate
+A C-style string literal and a std::string are always null-terminated.
+A std::string_view may or may not be null-terminated.
+
+Take care not to write any code that assumes a std::string_view is null terminated.
+If you have a non-null-terminated std::string_view and you need a null-terminated string for some reason, convert the std::string_view into a std::string.
+
+** When to use std::string vs std::string_view
+
+*** Variables
+**** Use a std::string variable when:
+
+You need a string that you can modify.
+You need to store user-inputted text.
+You need to store the return value of a function that returns a std::string.
+
+**** Use a std::string_view variable when:
+
+You need read-only access to part or all of a string that already exists elsewhere and will not be modified or destroyed before use of the std::string_view is complete.
+You need a symbolic constant for a C-style string.
+You need to continue viewing the return value of a function that returns a C-style string or a non-dangling std::string_view.
+
+*** Function parameters
+**** Use a std::string function parameter when:
+
+The function needs to modify the string passed in as an argument without affecting the caller. This is rare.
+You are using language standard C++14 or older and aren’t comfortable using references yet.
+
+**** Use a std::string_view function parameter when:
+
+The function needs a read-only string.
+The function needs to work with non-null-terminated strings.
+
+*** Return types
+**** Use a std::string return type when:
+
+The return value is a std::string local variable or function parameter.
+The return value is a function call or operator that returns a std::string by value.
+
+**** Use a std::string_view return type when:
+
+The function returns a C-style string literal or local std::string_view that has been initialized with a C-style string literal.
+The function returns a std::string_view parameter.
+
+** Some important about std::string and std::string_view
+*** std::string
+- Initializing and copying std::string is expensive, so avoid this as much as possible.
+- Avoid passing std::string by value, as this makes a copy.
+- If possible, avoid creating short-lived std::string objects.
+- Modifying a std::string will invalidate any views to that string.
+- It is okay to return a local std::string by value.
+*** std::string_view
+- std::string_view is typically used for passing string function parameters and returning string literals.
+- Because C-style string literals exist for the entire program, it is always okay to set a std::string_view to a C-style string literal.
+- When a string is destroyed, all views to that string are invalidated.
+- Using an invalidated view (other than using assignment to revalidate the view) will cause undefined behavior.
+- A std::string_view may or may not be null-terminated.
+* Operators
+** Operator precedence and associativity
+Ensure that the expressions (or function calls) you write are not dependent on operand (or argument) evaluation order.
+** Remainder and exponentiatio
+Prefer to compare the result of the remainder operator (operator%) against 0 if possible.
+** Increment/decrement operators, and side effects
+Favor the prefix versions, as they are more performant and less likely to cause surprises.
+
+Don’t use a variable that has a side effect applied to it more than once in a given statement. If you do, the result may be undefined.
+
+One exception is for simple assignment expressions such as x = x + y (which is essentially equivalent to x += y).
+** The comma operator
+#+begin_src cpp
+z = (a, b); // evaluate (a, b) first to get result of b, then assign that value to variable z.
+z = a, b; // evaluates as "(z = a), b", so z gets assigned the value of a, and b is evaluated and discarded.
+#+end_src
+Avoid using the comma operator, except within for loops.
+** Relational operators and floating point comparisons
+Don’t add unnecessary == or != to boolean conditions. It makes them harder to read without offering any additional value.
+
+*** Float
+Comparing floating point values using any of the relational operators can be dangerous. This is because floating point values are not precise, and small rounding errors in the floating point operands may cause them to be slightly smaller or slightly larger than expected. And this can throw off the relational operators.
+
+Avoid using operator== and operator!= to compare floating point values if there is any chance those values have been calculated.
+It is safe to compare a floating point literal with a variable of the same type that has been initialized with a literal of the same type, so long as the number of significant digits in each literal does not exceed the minimum precision for that type. Float has a minimum precision of 6 significant digits, and double has a minimum precision of 15 significant digits.
+
+It is generally not safe to compare floating point literals of different types.
+
+**** approximatelyEqual
+#+begin_src cpp :main no
+// C++23 version
+#include <algorithm> // for std::max
+#include <cmath>     // for std::abs (constexpr in C++23)
+
+// Return true if the difference between a and b is within epsilon percent of the larger of a and b
+constexpr bool approximatelyEqualRel(double a, double b, double relEpsilon)
+{
+	return (std::abs(a - b) <= (std::max(std::abs(a), std::abs(b)) * relEpsilon));
+}
+
+// Return true if the difference between a and b is less than or equal to absEpsilon, or within relEpsilon percent of the larger of a and b
+constexpr bool approximatelyEqualAbsRel(double a, double b, double absEpsilon, double relEpsilon)
+{
+    // Check if the numbers are really close -- needed when comparing numbers near zero.
+    if (std::abs(a - b) <= absEpsilon)
+        return true;
+
+    // Otherwise fall back to Knuth's algorithm
+    return approximatelyEqualRel(a, b, relEpsilon);
+}
+#+end_src
+
+** Logical operators
+*** De Morgan’s laws
+!(x && y) is equivalent to !x || !y
+!(x || y) is equivalent to !x && !y
+
+*** XOR
+#+begin_src cpp
+if (a != b) ... // a XOR b, assuming a and b are bool
+if (a != b != c) ... // a XOR b XOR c, assuming a, b, and c are bool
+if (static_cast<bool>(a) != static_cast<bool>(b) != static_cast<bool>(c)) ... // a XOR b XOR c, for any type that can be converted to bool
+if (!!a != !!b != !!c) // a XOR b XOR c, for any type that can be converted to bool
+#+end_src
+
+** Bit Manipulation
+In some storage-intensive cases, maybe need bit manipulation. So i skip it.
+
+* Scope, Duration, and Linkage
+
+** Compound statements
+Keep the nesting level of your functions to 3 or less. If your function has a need for more nested levels, consider refactoring your function into sub-functions.
+
+** Namespace
+In general, you should avoid deeply nested namespaces (more than 3 levels).
+
+alias: namespace Active = Foo::Goo;
+
+** Local variable
+Local variable have no linkage.
+
+Define variables in the most limited existing scope. Avoid creating new blocks whose only purpose is to limit the scope of variables.
+
+** Global variable
+Prefer defining global variables inside a namespace rather than in the global namespace.
+
+Consider using a “g” or “g_” prefix when naming global variables (especially those defined in the global namespace), to help differentiate them from local variables and function parameters.
+
+** variable shadow
+Avoid variable shadowing.
+
+** Internal Linkage
+Give identifiers internal linkage when you have an explicit reason to disallow access from other files.
+
+Consider giving all identifiers you don’t want accessible to other files internal linkage (use an unnamed namespace for this).
+
+** External Linkage
+If you want to define an uninitialized non-const global variable, do not use the extern keyword, otherwise C++ will think you’re trying to make a forward declaration for the variable.
+
+Although constexpr variables can be given external linkage via the extern keyword, they can not be forward declared as constexpr. This is because the compiler needs to know the value of the constexpr variable (at compile time). If that value is defined in some other file, the compiler has no visibility on what value was defined in that other file.
+
+However, you can forward declare a constexpr variable as const, which the compiler will treat as a runtime const. This isn’t particularly useful.
+
+** Non-const global variable are evil
+Use local variables instead of global variables whenever possible.
+
+Avoid initializing objects with static duration using other objects with static duration from a different translation unit.
+
+Dynamic initialization of global variables is also susceptible to initialization order issues and should be avoided whenever possible.
+
+** Protecting yourself from global destruction
+First, prefix all non-namespaced global variables with “g” or “g_”, or better yet, put them in a namespace, to reduce the chance of naming collisions.
+
+Second, instead of allowing direct access to the global variable, it’s a better practice to “encapsulate” the variable. Make sure the variable can only be accessed from within the file it’s declared in, e.g. by making the variable static or const, then provide external global “access functions” to work with the variable. These functions can ensure proper usage is maintained (e.g. do input validation, range checking, etc…). Also, if you ever decide to change the underlying implementation (e.g. move from one database to another), you only have to update the access functions instead of every piece of code that uses the global variable directly.
+
+Third, when writing an otherwise standalone function that uses the global variable, don’t use the variable directly in your function body. Pass it in as an argument instead. That way, if your function ever needs to use a different value for some circumstance, you can simply vary the argument. This helps maintain modularity.
+
+#+begin_src cpp :main no
+#include <iostream>
+
+namespace constants
+{
+    constexpr double gravity { 9.8 };
+}
+
+// This function can calculate the instant velocity for any gravity value (more useful)
+double instantVelocity(int time, double gravity)
+{
+    return gravity * time;
+}
+
+int main()
+{
+    std::cout << instantVelocity(5, constants::gravity) << '\n'; // pass our constant to the function as a parameter
+
+    return 0;
+}
+#+end_src
+
+** Share global constant across multiple files
+If you need global constants and your compiler is C++17 capable, prefer defining inline constexpr global variables in a header file.
+
+inline implicitly extern;
+
+** Static local variables
+Using the static keyword on a local variable changes its duration from automatic duration to static duration. This means the variable is now created at the start of the program, and destroyed at the end of the program (just like a global variable). As a result, the static variable will retain its value even after it goes out of scope!
+
+Initialize your static local variables. Static local variables are only initialized the first time the code is executed, not on subsequent calls.
+
+A static local variable has block scope like a local variable, but its lifetime is until the end of the program like a global variable.
+
+Static local variables can be used when a function needs a persistent object that is not directly accessible outside of the function.
+
+Const static local variables are generally okay to use.
+
+Non-const static local variables should generally be avoided. If you do use them, ensure the variable never needs to be reset, and isn’t used to alter program flow.
+
+** Scope, duration, linkage summary
+| Type                                     | Example                         | Scope  | Duration  | Linkage  | Notes                        |
+| Local variable                           | int x;                          | Block  | Automatic | None     |                              |
+| Static local variable                    | static int s_x;                 | Block  | Static    | None     |                              |
+| Dynamic local variable                   | int* x { new int{} };           | Block  | Dynamic   | None     |                              |
+| Function parameter                       | void foo(int x)                 | Block  | Automatic | None     |                              |
+| Internal non-const global variable       | static int g_x;                 | Global | Static    | Internal | Initialized or uninitialized |
+| External non-const global variable       | int g_x;                        | Global | Static    | External | Initialized or uninitialized |
+| Inline non-const global variable (C++17) | inline int g_x;                 | Global | Static    | External | Initialized or uninitialized |
+| Internal constant global variable        | constexpr int g_x { 1 };        | Global | Static    | Internal | Must be initialized          |
+| External constant global variable        | extern const int g_x { 1 };     | Global | Static    | External | Must be initialized          |
+| Inline constant global variable (C++17)  | inline constexpr int g_x { 1 }; | Global | Static    | External | Must be initialized          |
+
+*** Forward declaration summary
+| Type                                      | Example                   | Notes                                             |
+| Function forward declaration              | void foo(int x);          | Prototype only, no function body                  |
+| Non-constant variable forward declaration | extern int g_x;           | Must be uninitialized                             |
+| Const variable forward declaration        | extern const int g_x;     | Must be uninitialized                             |
+| Constexpr variable forward declaration    | extern constexpr int g_x; | Not allowed, constexpr cannot be forward declared |
+
+*** storage class specifier
+| Specifier    | Meaning                                                                    | Note                |
+| extern       | static (or thread_local) storage duration and external linkage             |                     |
+| static       | static (or thread_local) storage duration and internal linkage             |                     |
+| thread_local | thread storage duration                                                    |                     |
+| mutable      | object allowed to be modified even if containing class is const            |                     |
+| auto         | automatic storage duration                                                 | Deprecated in C++11 |
+| register     | automatic storage duration and hint to the compiler to place in a register | Deprecated in C++17 |
+
+** Using declarations and using directives
+Avoid using-declarations in header files.
+
+Prefer explicit namespace qualifiers over using-statements. Avoid using-directives altogether (except using namespace std::literals). Using-declarations are okay to use in .cpp files, after the #includes.
+
+** Unnamed namespace and inline namespace
+*** unname namespace
+Prefer unnamed namespaces when you have content you want to keep local to a translation unit.
+
+Avoid unnamed namespaces in header files.
+*** Inline namespace
+#+begin_src cpp
+#include <iostream>
+
+inline namespace V1 // declare an inline namespace named V1
+{
+    void doSomething()
+    {
+        std::cout << "V1\n";
+    }
+}
+
+namespace V2 // declare a normal namespace named V2
+{
+    void doSomething()
+    {
+        std::cout << "V2\n";
+    }
+}
+
+int main()
+{
+    V1::doSomething(); // calls the V1 version of doSomething()
+    V2::doSomething(); // calls the V2 version of doSomething()
+
+    doSomething(); // calls the inline version of doSomething() (which is V1)
+
+    return 0;
+}
+#+end_src
+*** Mix unname and inline
+#+begin_src cpp
+#include <iostream>
+
+namespace V1 // declare a normal namespace named V1
+{
+    void doSomething()
+    {
+        std::cout << "V1\n";
+    }
+}
+
+inline namespace V2 // declare an inline namespace named V2
+{
+    namespace // unnamed namespace
+    {
+        void doSomething() // has internal linkage
+        {
+            std::cout << "V2\n";
+        }
+
+    }
+}
+
+int main()
+{
+    V1::doSomething(); // calls the V1 version of doSomething()
+    V2::doSomething(); // calls the V2 version of doSomething()
+
+    doSomething(); // calls the inline version of doSomething() (which is V2)
+
+    return 0;
+}
+#+end_src
+* Control Flow
+** Constexpr if statements
+Favor constexpr if statements over non-constexpr if statements when the conditional is a constant expression.
+** Switch statement basics
+Switch type only allow for integral (or enumerated) types.
+
+Place the default case last in the switch block.
+
+Use the [​[fallthrough]] attribute (along with a null statement) to indicate intentional fallthrough.
+*** Labels do not define a new scope
+#+begin_src cpp
+switch (1)
+{
+case 1: // does not create an implicit block
+    foo(); // this is part of the switch scope, not an implicit block to case 1
+    break; // this is part of the switch scope, not an implicit block to case 1
+default:
+    std::cout << "default case\n";
+    break;
+}
+#+end_src
+*** Variable declaration and initialization inside case statements
+#+begin_src cpp
+switch (1)
+{
+    int a; // okay: definition is allowed before the case labels
+    int b{ 5 }; // illegal: initialization is not allowed before the case labels
+
+case 1:
+    int y; // okay but bad practice: definition is allowed within a case
+    y = 4; // okay: assignment is allowed
+    break;
+
+case 2:
+    int z{ 4 }; // illegal: initialization is not allowed if subsequent cases exist
+    y = 5; // okay: y was declared above, so we can use it here too
+    break;
+
+case 3:
+    break;
+}
+#+end_src
+
+If defining variables used in a case statement, do so in a block inside the case.
+#+begin_src cpp
+switch (1)
+{
+case 1:
+{ // note addition of explicit block here
+    int x{ 4 }; // okay, variables can be initialized inside a block inside a case
+    std::cout << x;
+    break;
+}
+
+default:
+    std::cout << "default case\n";
+    break;
+}
+#+end_src
+** Goto Statement
+Statement labels must be associated with a statement.
+
+Avoid goto statements (unless the alternatives are significantly worse for code readability).
+** Introduction to loops and while statements
+Favor while(true) for intentional infinite loops.
+
+Integral loop variables should generally be a signed integral type.
+** Do while
+Favor while loops over do-while when given an equal choice.
+** For loop
+Avoid operator!= when doing numeric comparisons in the for-loop condition. Prefer operator< or operator<= where possible.
+
+Defining multiple variables (in the init-statement) and using the comma operator (in the end-expression) is acceptable inside a for-statement.
+
+Variables used only inside a loop should be defined inside the scope of the loop.
+
+Prefer for-loops over while-loops when there is an obvious loop variable.
+Prefer while-loops over for-loops when there is no obvious loop variable.
+
+#+begin_src cpp
+for (;;)
+    statement;
+// equivalent to, but prefer latter
+while (true)
+    statement;
+#+end_src
+** Break and continue
+Use break and continue when they simplify your loop logic.
+Use early returns when they simplify your function’s logic.
+** Halt
+std::exit is called implicitly when main() returns.
+The std::exit() function does not clean up local variables in the current function or up the call stack.
+
+std::atexit
+#+begin_src cpp :main no
+#include <cstdlib> // for std::exit()
+#include <iostream>
+
+void cleanup()
+{
+    // code here to do any kind of cleanup required
+    std::cout << "cleanup!\n";
+}
+
+int main()
+{
+    // register cleanup() to be called automatically when std::exit() is called
+    std::atexit(cleanup); // note: we use cleanup rather than cleanup() since we're not making a function call to cleanup() right now
+
+    std::cout << 1 << '\n';
+
+    std::exit(0); // terminate and return status code 0 to operating system
+
+    // The following statements never execute
+    std::cout << 2 << '\n';
+
+    return 0;
+}
+#+end_src
+In multi-threaded programs, calling std::exit() can cause your program to crash (because the thread calling std::exit() will cleanup static objects that may still be accessed by other threads). For this reason, C++ has introduced another pair of functions that work similarly to std::exit() and std::atexit() called std::quick_exit() and std::at_quick_exit(). std::quick_exit() terminates the program normally, but does not clean up static objects, and may or may not do other types of cleanup. std::at_quick_exit() performs the same role as std::atexit() for programs terminated with std::quick_exit().
+
+Only use a halt if there is no safe or reasonable way to return normally from the main function. If you haven’t disabled exceptions, prefer using exceptions for handling errors safely.
+** Generating random numbers using Mersenne Twister
+*** Seeding with the system clock
+#+begin_src cpp :main no
+#include <iostream>
+#include <random> // for std::mt19937
+#include <chrono> // for std::chrono
+
+int main()
+{
+	// Seed our Mersenne Twister using steady_clock
+	std::mt19937 mt{ static_cast<std::mt19937::result_type>(
+		std::chrono::steady_clock::now().time_since_epoch().count()
+		) };
+
+	// Create a reusable random number generator that generates uniform numbers between 1 and 6
+	std::uniform_int_distribution die6{ 1, 6 }; // for C++14, use std::uniform_int_distribution<> die6{ 1, 6 };
+
+	// Print a bunch of random numbers
+	for (int count{ 1 }; count <= 40; ++count)
+	{
+		std::cout << die6(mt) << '\t'; // generate a roll of the die here
+
+		// If we've printed 10 numbers, start a new row
+		if (count % 10 == 0)
+			std::cout << '\n';
+	}
+
+	return 0;
+}
+#+end_src
+*** Seeding with the random device
+std::random_device{} creates a value-initialized temporary object of type std::random_device. The () then calls operator() on that temporary object, which returns a randomized value (which we use as an initializer for our Mersenne Twister)
+
+#+begin_src cpp
+#include <iostream>
+#include <random>
+
+int main()
+{
+	std::random_device rd{};
+	std::seed_seq ss{ rd(), rd(), rd(), rd(), rd(), rd(), rd(), rd() }; // get 8 integers of random numbers from std::random_device for our seed
+	std::mt19937 mt{ ss }; // initialize our Mersenne Twister with the std::seed_seq
+
+	// Create a reusable random number generator that generates uniform numbers between 1 and 6
+	std::uniform_int_distribution die6{ 1, 6 }; // for C++14, use std::uniform_int_distribution<> die6{ 1, 6 };
+
+	// Print a bunch of random numbers
+	for (int count{ 1 }; count <= 40; ++count)
+	{
+		std::cout << die6(mt) << '\t'; // generate a roll of the die here
+
+		// If we've printed 10 numbers, start a new row
+		if (count % 10 == 0)
+			std::cout << '\n';
+	}
+
+	return 0;
+}
+#+end_src
+
+Only seed a given pseudo-random number generator once, and do not reseed it.
+** Global random numbers (Random.h)
+random.h
+#+begin_src cpp :main no
+#ifndef RANDOM_MT_H
+#define RANDOM_MT_H
+
+#include <chrono>
+#include <random>
+
+// This header-only Random namespace implements a self-seeding Mersenne Twister.
+// Requires C++17 or newer.
+// It can be #included into as many code files as needed (The inline keyword avoids ODR violations)
+// Freely redistributable, courtesy of learncpp.com (https://www.learncpp.com/cpp-tutorial/global-random-numbers-random-h/)
+namespace Random
+{
+	// Returns a seeded Mersenne Twister
+	// Note: we'd prefer to return a std::seed_seq (to initialize a std::mt19937), but std::seed can't be copied, so it can't be returned by value.
+	// Instead, we'll create a std::mt19937, seed it, and then return the std::mt19937 (which can be copied).
+	inline std::mt19937 generate()
+	{
+		std::random_device rd{};
+
+		// Create seed_seq with clock and 7 random numbers from std::random_device
+		std::seed_seq ss{
+			static_cast<std::seed_seq::result_type>(std::chrono::steady_clock::now().time_since_epoch().count()),
+				rd(), rd(), rd(), rd(), rd(), rd(), rd() };
+
+		return std::mt19937{ ss };
+	}
+
+	// Here's our global std::mt19937 object.
+	// The inline keyword means we only have one global instance for our whole program.
+	inline std::mt19937 mt{ generate() }; // generates a seeded std::mt19937 and copies it into our global object
+
+	// Generate a random int between [min, max] (inclusive)
+	inline int get(int min, int max)
+	{
+		return std::uniform_int_distribution{min, max}(mt);
+	}
+
+	// The following function templates can be used to generate random numbers
+	// when min and/or max are not type int
+	// See https://www.learncpp.com/cpp-tutorial/function-template-instantiation/
+	// You can ignore these if you don't understand them
+
+	// Generate a random value between [min, max] (inclusive)
+	// * min and max have same type
+	// * Return value has same type as min and max
+	// * Supported types:
+	// *    short, int, long, long long
+	// *    unsigned short, unsigned int, unsigned long, or unsigned long long
+	// Sample call: Random::get(1L, 6L);             // returns long
+	// Sample call: Random::get(1u, 6u);             // returns unsigned int
+	template <typename T>
+	T get(T min, T max)
+	{
+		return std::uniform_int_distribution<T>{min, max}(mt);
+	}
+
+	// Generate a random value between [min, max] (inclusive)
+	// * min and max can have different types
+	// * Must explicitly specify return type as template type argument
+	// * min and max will be converted to the return type
+	// Sample call: Random::get<std::size_t>(0, 6);  // returns std::size_t
+	// Sample call: Random::get<std::size_t>(0, 6u); // returns std::size_t
+	// Sample call: Random::get<std::int>(0, 6u);    // returns int
+	template <typename R, typename S, typename T>
+	R get(S min, T max)
+	{
+		return get<R>(static_cast<R>(min), static_cast<R>(max));
+	}
+}
+
+#endif
+#+end_src
+
+main.cpp
+#+begin_src cpp :main no
+#include "Random.h" // defines Random::mt, Random::get(), and Random::generate()
+#include <cstddef> // for std::size_t
+#include <iostream>
+
+int main()
+{
+	// We can use Random::get() to generate random numbers
+
+	std::cout << Random::get(1, 6) << '\n';   // returns int between 1 and 6
+	std::cout << Random::get(1u, 6u) << '\n'; // returns unsigned int between 1 and 6
+
+	// The following uses a template type argument
+	// See https://www.learncpp.com/cpp-tutorial/function-template-instantiation/
+	std::cout << Random::get<std::size_t>(1, 6u) << '\n'; // returns std::size_t between 1 and 6
+
+	// We can access Random::mt directly if we have our own distribution
+
+	// Let's create a reusable random number generator that generates uniform numbers between 1 and 6
+	std::uniform_int_distribution die6{ 1, 6 }; // for C++14, use std::uniform_int_distribution<> die6{ 1, 6 };
+	for (int count{ 1 }; count <= 10; ++count)
+	{
+		std::cout << die6(Random::mt) << '\t'; // generate a roll of the die here
+	}
+
+	std::cout << '\n';
+
+	return 0;
+}
+#+end_src
+* Error Detection and Handling
+** Code Coverage
+Aim for 100% branch coverage of your code.
+
+Loop coverage (informally called the 0, 1, 2 test) says that if you have a loop in your code, you should ensure it works properly when it iterates 0 times, 1 time, and 2 times.
+
+*** Testing different categories of input
+For integers, make sure you’ve considered how your function handles negative values, zero, and positive values. You should also check for overflow if that’s relevant.
+
+For floating point numbers, make sure you’ve considered how your function handles values that have precision issues (values that are slightly larger or smaller than expected). Good double type values to test with are 0.1 and -0.1 (to test numbers that are slightly larger than expected) and 0.6 and -0.6 (to test numbers that are slightly smaller than expected).
+
+For strings, make sure you’ve considered how your function handles an empty string, an alphanumeric string, strings that have whitespace (leading, trailing, and inner), and strings that are all whitespace.
+
+If your function takes a pointer, don’t forget to test nullptr as well (don’t worry if this doesn’t make sense, we haven’t covered it yet).
+
+*** std::cout vs std::cerr vs logging
+Use std::cout for all conventional, user-facing text.
+
+For an interactive program, use std::cout for normal user-facing error messages (e.g. “Your input was invalid”). Use std::cerr or a logfile for status and diagnostic information that may be helpful for diagnosing issues but probably isn’t interesting for normal users. This can include technical warnings and errors (e.g. bad input to function x), status updates (e.g. successfully opened file x, failed to connect to internet service x), percentage completion of long tasks (e.g. encoding 50% complete), etc…
+
+For a non-interactive program (tool or service), use std::cerr for error output only (e.g. could not open file x). This allows errors to be displayed or parsed separately from normal output.
+
+For any application type that is transactional in nature (e.g. one that processes specific events, such as an interactive web browser or non-interactive web server), use a logfile to produce a transactional log of events that can be reviewed later. This can include outputting to the logfile which file is being processed, updates on the percentage complete, timestamps of when it started certain stages of computing, warning and error messages, etc…
+
+*** std::cin handling invalid input
+#+begin_src cpp
+#include <cstdlib> // for std::exit
+#include <iostream>
+#include <limits> // for std::numeric_limits
+
+void ignoreLine()
+{
+    std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+}
+
+// returns true if extraction failed, false otherwise
+bool clearFailedExtraction()
+{
+    // Check for failed extraction
+    if (!std::cin) // If the previous extraction failed
+    {
+        if (std::cin.eof()) // If the stream was closed
+        {
+            exit(0); // Shut down the program now
+        }
+
+        // Let's handle the failure
+        std::cin.clear(); // Put us back in 'normal' operation mode
+        ignoreLine();     // And remove the bad input
+
+        return true;
+    }
+
+    return false;
+}
+
+double getDouble()
+{
+    while (true) // Loop until user enters a valid input
+    {
+        std::cout << "Enter a decimal number: ";
+        double x{};
+        std::cin >> x;
+
+        if (clearFailedExtraction())
+        {
+            std::cout << "Oops, that input is invalid.  Please try again.\n";
+            continue;
+        }
+
+        ignoreLine(); // Remove any extraneous input
+        return x;     // Return the value we extracted
+    }
+}
+
+char getOperator()
+{
+    while (true) // Loop until user enters a valid input
+    {
+        std::cout << "Enter one of the following: +, -, *, or /: ";
+        char operation{};
+        std::cin >> operation;
+
+        if (!clearFailedExtraction()) // we'll handle error messaging if extraction failed below
+             ignoreLine(); // remove any extraneous input (only if extraction succeded)
+
+        // Check whether the user entered meaningful input
+        switch (operation)
+        {
+        case '+':
+        case '-':
+        case '*':
+        case '/':
+            return operation; // Return the entered char to the caller
+        default: // Otherwise tell the user what went wrong
+            std::cout << "Oops, that input is invalid.  Please try again.\n";
+        }
+    }
+}
+
+void printResult(double x, char operation, double y)
+{
+    std::cout << x << ' ' << operation << ' ' << y << " is ";
+
+    switch (operation)
+    {
+    case '+':
+        std::cout << x + y << '\n';
+        return;
+    case '-':
+        std::cout << x - y << '\n';
+        return;
+    case '*':
+        std::cout << x * y << '\n';
+        return;
+    case '/':
+        if (y == 0.0)
+            break;
+
+        std::cout << x / y << '\n';
+        return;
+    }
+
+    std::cout << "???";  // Being robust means handling unexpected parameters as well, even though getOperator() guarantees operation is valid in this particular program
+}
+
+int main()
+{
+    double x{ getDouble() };
+    char operation{ getOperator() };
+    double y{ getDouble() };
+
+    // Handle division by 0
+    while (operation == '/' && y == 0.0)
+    {
+        std::cout << "The denominator cannot be zero.  Try again.\n";
+        y = getDouble();
+    }
+
+    printResult(x, operation, y);
+
+    return 0;
+}
+#+end_src
+
+*** Assert and static_assert
+Use assertions to document cases that should be logically impossible.
+
+If the macro NDEBUG is defined, the assert macro gets disabled.
+
+#+begin_src cpp
+assert(moved && "Need to handle case where student was just moved to another classroom");
+#+end_src
+
+A static_assert is an assertion that is checked at compile-time rather than at runtime, with a failing static_assert causing a compile error. Unlike assert, which is declared in the <cassert> header, static_assert is a keyword, so no header needs to be included to use it.
+
 * Next
-https://www.learncpp.com/cpp-tutorial/stdstring_view-part-2/
+https://www.learncpp.com/cpp-tutorial/implicit-type-conversion/

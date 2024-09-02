@@ -2035,5 +2035,48 @@ int main()
     return 0;
 }
 #+end_src
+** return by ref or address
+Avoid returning references to non-const local static variables.
+Prefer return by reference over return by address unless the ability to return “no object” (using nullptr) is important.
+** in and out parameters
+Avoid out-parameters (except in the rare case where no better options exist).
+
+Prefer pass by reference for non-optional out-parameters.
+** type dedution with pointers references and const
+If you want a const pointer, pointer to const, or const pointer to const, reapply the const qualifier(s) even when it’s not strictly necessary, as it makes your intent clear and helps prevent mistakes.
+If you want a const reference, reapply the const qualifier even when it’s not strictly necessary, as it makes your intent clear and helps prevent mistakes.
+*** Top-level const and low-level const
+A top-level const is a const qualifier that applies to an object itself. For example:
+#+begin_src cpp
+const int x;    // this const applies to x, so it is top-level
+int* const ptr; // this const applies to ptr, so it is top-level
+#+end_src
+
+In contrast, a low-level const is a const qualifier that applies to the object being referenced or pointed to:
+#+begin_src cpp
+const int& ref; // this const applies to the object being referenced, so it is low-level
+const int* ptr; // this const applies to the object being pointed to, so it is low-level
+#+end_src
+
+A reference to a const value is always a low-level const. A pointer can have a top-level, low-level, or both kinds of const:
+#+begin_src cpp
+const int* const ptr; // the left const is low-level, the right const is top-level
+#+end_src
+
+When we say that type deduction drops const qualifiers, it only drops top-level consts. Low-level consts are not dropped.
+** std::optional
+| Behavior           | Pointer                              | std::optional                              |
+|--------------------+--------------------------------------+--------------------------------------------|
+| Hold no value      | initialize/assign {} or std::nullptr | initialize/assign {} or std::nullopt       |
+| Hold a value       | initialize/assign an address         | initialize/assign a value                  |
+| Check if has value | implicit conversion to bool          | implicit conversion to bool or has_value() |
+| Get value          | dereference                          | dereference or value()                     |
+Return a std::optional (instead of a sentinel value) for functions that may fail, unless your function needs to return additional information about why it failed.
+std::expected (introduced in C++23) is designed to handle the case where a function can return either an expected value or an unexpected error code.
+
+Prefer std::optional for optional return types.
+
+Prefer function overloading for optional function parameters (when possible). Otherwise, use std::optional<T> for optional arguments when T would normally be passed by value. Favor const T* when T is expensive to copy.
+
 * Next
-https://www.learncpp.com/cpp-tutorial/return-by-reference-and-return-by-address/
+https://www.learncpp.com/cpp-tutorial/introduction-to-program-defined-user-defined-types/

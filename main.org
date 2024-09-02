@@ -1713,6 +1713,327 @@ assert(moved && "Need to handle case where student was just moved to another cla
 #+end_src
 
 A static_assert is an assertion that is checked at compile-time rather than at runtime, with a failing static_assert causing a compile error. Unlike assert, which is declared in the <cassert> header, static_assert is a keyword, so no header needs to be included to use it.
+* Type Conversion, Type Aliases, and Type Deduction
+** Narrowing conversions
+From a floating point type to an integral type.
+From a floating point type to a narrower or lesser ranked floating point type, unless the value being converted is constexpr and is in range of the destination type (even if the destination type doesn’t have the precision to store all the significant digits of the number).
+From an integral to a floating point type, unless the value being converted is constexpr and whose value can be stored exactly in the destination type.
+From an integral type to another integral type that cannot represent all values of the original type, unless the value being converted is constexpr and whose value can be stored exactly in the destination type. This covers both wider to narrower integral conversions, as well as integral sign conversions (signed to unsigned, or vice-versa).
 
+If you need to perform a narrowing conversion, use static_cast to convert it into an explicit conversion.
+Some constexpr conversions aren’t considered narrowing.
+
+** Arithmetic conversions
+The usual arithmetic conversion rules are somewhat complex, so we’ll simplify a bit. The compiler has a ranked list of types that looks something like this:
+*** The usual arithmetic conversion rules
+1. long double (highest rank)
+2. double
+3. float
+4. long long
+5. long
+6. int (lowest rank)
+
+**** sign and unsigned
+If the rank of the unsigned operand is greater than the rank of the signed operand, the signed operand is converted to the type of the unsigned operand.
+If the type of the signed operand can represent all the values of the type of the unsigned operand, the type of the unsigned operand is converted to the type of the signed operand.
+Otherwise both operands are converted to the corresponding unsigned type of the signed operand.
+** Explicit type conversion (casting) and static_cast
+Avoid using C-style casts.
+Avoid const casts and reinterpret casts unless you have a very good reason to use them.
+** Typedefs and type aliases
+#+begin_src cpp
+using Distance = double; // define Distance as an alias for type double
+#+end_src
+Name your type aliases starting with a capital letter and do not use a suffix (unless you have a specific reason to do otherwise).
+
+Prefer type aliases over typedefs.
+
+Use type aliases judiciously, when they provide a clear benefit to code readability or code maintenance.
+** Type deduction for objects using the auto keyword
+Use type deduction for your variables when the type of the object doesn’t matter.
+
+Favor an explicit type when you require a specific type that differs from the type of the initializer, or when your object is used in a context where making the type obvious is useful.
+*** Type deduction drops const / constexpr qualifiers
+#+begin_src cpp
+int main()
+{
+    const int x { 5 };  // x has type const int (compile-time const)
+    auto y { x };       // y will be type int (const is dropped)
+
+    constexpr auto z { x }; // z will be type constexpr int (constexpr is reapplied)
+
+    return 0;
+}
+#+end_src
+*** Type deduction for string literals
+#+begin_src cpp
+#include <string>
+#include <string_view>
+
+int main()
+{
+    using namespace std::literals; // easiest way to access the s and sv suffixes
+
+    auto s { "Hello, world" }; // s will be type const char*, not std::string
+    auto s1 { "goo"s };  // "goo"s is a std::string literal, so s1 will be deduced as a std::string
+    auto s2 { "moo"sv }; // "moo"sv is a std::string_view literal, so s2 will be deduced as a std::string_view
+
+    return 0;
+}
+#+end_src
+** Type deduction for functions
+Favor explicit return types over function return type deduction for normal functions.
+
+Auto can also be used as a function return type to have the compiler infer the function’s return type from the function’s return statements, though this should be avoided for normal functions. Auto is used as part of the trailing return syntax.
+* Function Overloading and Function Templates
+** Function overload differentiation
+| Function property    | Used for differentiation | Notes                                                                                        |
+|----------------------+--------------------------+----------------------------------------------------------------------------------------------|
+| Number of parameters | Yes                      |                                                                                              |
+| Type of parameters   | Yes                      | Excludes typedefs, type aliases, and const qualifier on value parameters. Includes ellipses. |
+| Return type          | No                       |                                                                                              |
+** Deleting all non-matching overloads
+= delete means “I forbid this”, not “this doesn’t exist”.
+#+begin_src cpp
+#include <iostream>
+
+// This function will take precedence for arguments of type int
+void printInt(int x)
+{
+    std::cout << x << '\n';
+}
+
+// This function template will take precedence for arguments of other types
+// Since this function template is deleted, calls to it will halt compilation
+template <typename T>
+void printInt(T x) = delete;
+
+int main()
+{
+    printInt(97);   // okay
+    printInt('a');  // compile error
+    printInt(true); // compile error
+
+    return 0;
+}
+#+end_src
+** Default arguments
+If a parameter is given a default argument, all subsequent parameters (to the right) must also be given default arguments.
+If the function has a forward declaration (especially one in a header file), put the default argument there. Otherwise, put the default argument in the function definition.
+** Function templates
+Templates can work with types that didn’t even exist when the template was written. This helps make template code both flexible and future proof!
+
+Use a single capital letter starting with T (e.g. T, U, V, etc…) to name type template parameters that are used in trivial or obvious ways and represent “any reasonable type”.
+
+If the type template parameter has a non-obvious usage or specific requirements that must be met, then a more descriptive name is warranted. (e.g. Allocator or TAllocator).
+** function template instantiation
+Favor the normal function call syntax when making calls to a function instantiated from a function template (unless you need the function template version to be preferred over a matching non-template function).
+
+The compiler will instantiate and compile function templates that do not make sense semantically as long as they are syntactically valid. It is your responsibility to make sure you are calling such function templates with arguments that make sense.
+
+Use function templates to write generic code that can work with a wide variety of types whenever you have the need.
+
+Templates that are needed in multiple files should be defined in a header file, and then #included wherever needed. This allows the compiler to see the full template definition and instantiate the template when needed.
+** Function templates with multiple template types
+#+begin_src cpp :main no
+#include <iostream>
+
+template <typename T, typename U>
+auto max(T x, U y)
+{
+    return (x < y) ? y : x;
+}
+
+int main()
+{
+    std::cout << max(2, 3.5) << '\n';
+
+    return 0;
+}
+#+end_src
+*** Abbreviated function templates 
+#+begin_src cpp
+auto max(auto x, auto y)
+{
+    return (x < y) ? y : x;
+}
+#+end_src
+is shorthand in C++20 for the following:
+#+begin_src cpp
+template <typename T, typename U>
+auto max(T x, U y)
+{
+    return (x < y) ? y : x;
+}
+#+end_src
+Feel free to use abbreviated function templates with a single auto parameter, or where each auto parameter should be an independent type (and your language standard is set to C++20 or newer).
+** Non-type template parameters
+A non-type template parameter can be any of the following types:
+
+- An integral type
+- An enumeration type
+- std::nullptr_t
+- A floating point type (since C++20)
+- A pointer or reference to an object
+- A pointer or reference to a function
+- A pointer or reference to a member function
+- A literal class type (since C++20)
+*** example
+#+begin_src cpp :main no
+#include <iostream>
+
+template <int N> // declare a non-type template parameter of type int named N
+void print()
+{
+    std::cout << N << '\n'; // use value of N here
+}
+
+int main()
+{
+    print<5>(); // 5 is our non-type template argument
+
+    return 0;
+}
+#+end_src
+Use N as the name of an int non-type template parameter.
+
+Non-type template parameters are used primarily when we need to pass constexpr values to functions (or class types) so they can be used in contexts that require a constant expression.
+* Compound Types: References and Pointers
+** Lvalue and Rvalue
+Lvalue expressions evaluate to an identifiable object.
+Rvalue expressions evaluate to a value.
+** lvalue reference
+When defining a reference, place the ampersand next to the type (not the reference variable’s name).
+References can’t be reseated (changed to refer to another object)
+
+
+** lvalue reference to const
+Favor lvalue references to const over lvalue references to non-const unless you need to modify the object being referenced.
+
+Lvalue references can only bind to modifiable lvalues.
+
+Lvalue references to const can bind to modifiable lvalues, non-modifiable lvalues, and rvalues. This makes them a much more flexible type of reference.
+*** Initializing an lvalue reference to const with a value of a different type
+If you try to bind a const lvalue reference to a value of a different type, the compiler will create a temporary object of the same type as the reference, initialize it using the value, and then bind the reference to the temporary.
+
+Lifetime extension only works when a const reference is directly bound to a temporary. Temporaries returned from a function (even ones returned by const reference) are not eligible for lifetime extension.
+*** constexpr lvalue reference
+When applied to a reference, constexpr allows the reference to be used in a constant expression. Constexpr references have a particular limitation: they can only be bound to objects with static duration (either globals or static locals). This is because the compiler knows where static objects will be instantiated in memory, so it can treat that address as a compile-time constant.
+
+#+begin_src cpp :main no
+int g_x { 5 };
+
+int main()
+{
+    [[maybe_unused]] constexpr int& ref1 { g_x }; // ok, can bind to global
+
+    static int s_x { 6 };
+    [[maybe_unused]] constexpr int& ref2 { s_x }; // ok, can bind to static local
+
+    int x { 6 };
+    [[maybe_unused]] constexpr int& ref3 { x }; // compile error: can't bind to non-static object
+
+    return 0;
+}
+#+end_src
+** pass by const lvalue reference
+Favor passing by const reference over passing by non-const reference unless you have a specific reason to do otherwise (e.g. the function needs to change the value of an argument).
+*** When to pass by (const) reference
+Prefer pass by value for objects that are cheap to copy, and pass by const reference for objects that are expensive to copy. If you’re not sure whether an object is cheap or expensive to copy, favor pass by const reference.
+
+As a rule of thumb, pass fundamental types by value, and class (or struct) types by const reference.
+
+Other common types to pass by value: enumerated types and std::string_view.
+Other common types to pass by (const) reference: std::string, std::array, and std::vector.
+** Pointer
+When declaring a pointer type, place the asterisk next to the type name.
+Always initialize your pointers.
+
+#+begin_src cpp
+int* ptr1, ptr2;   // incorrect: ptr1 is a pointer to an int, but ptr2 is just a plain int!
+int* ptr3, * ptr4; // correct: ptr3 and ptr4 are both pointers to an int
+#+end_src
+*** Pointer vs Reference
+- References must be initialized, pointers are not required to be initialized (but should be).
+- References are not objects, pointers are.
+- References can not be reseated (changed to reference something else), pointers can change what they are pointing at.
+- References must always be bound to an object, pointers can point to nothing (we’ll see an example of this in the next lesson).
+- References are “safe” (outside of dangling references), pointers are inherently dangerous (we’ll also discuss this in the next lesson).
+** Null pointer
+Value initialize your pointers (to be null pointers) if you are not initializing them with the address of a valid object.
+Use nullptr when you need a null pointer literal for initialization, assignment, or passing a null pointer to a function.
+
+#+begin_src cpp :main no
+#include <iostream>
+
+int main()
+{
+    int x { 5 };
+    int* ptr { &x };
+
+    // pointers convert to Boolean false if they are null, and Boolean true if they are non-null
+    if (ptr) // implicit conversion to Boolean
+        std::cout << "ptr is non-null\n";
+    else
+        std::cout << "ptr is null\n";
+
+    int* nullPtr {};
+    std::cout << "nullPtr is " << (nullPtr ? "non-null\n" : "null\n"); // implicit conversion to Boolean
+
+    return 0;
+}
+#+end_src
+
+Conditionals can only be used to differentiate null pointers from non-null pointers. There is no convenient way to determine whether a non-null pointer is pointing to a valid object or dangling (pointing to an invalid object).
+
+A pointer should either hold the address of a valid object, or be set to nullptr. That way we only need to test pointers for null, and can assume any non-null pointer is valid.
+
+When an object is destroyed, any pointers to the destroyed object will be left dangling (they will not be automatically set to nullptr). It is your responsibility to detect these cases and ensure those pointers are subsequently set to nullptr.
+
+Favor references over pointers unless the additional capabilities provided by pointers are needed.
+** Pointer and const
+#+begin_src cpp :main no
+int main()
+{
+    int v{ 5 };
+
+    int* ptr0 { &v };             // points to an "int" but is not const itself, so this is a normal pointer.
+    const int* ptr1 { &v };       // points to a "const int" but is not const itself, so this is a pointer to a const value.
+    int* const ptr2 { &v };       // points to an "int" and is const itself, so this is a const pointer (to a non-const value).
+    const int* const ptr3 { &v }; // points to a "const int" and is const itself, so this is a const pointer to a const value.
+
+    // if the const is on the left side of the *, the const belongs to the value
+    // if the const is on the right side of the *, the const belongs to the pointer
+
+    return 0;
+}
+#+end_src
+** pass by address
+Prefer pass by reference to pass by address unless you have a specific reason to use pass by address.
+
+nullptr has type std::nullptr_t (defined in header <cstddef>).
+*** Pass by address… by reference
+A function to change what a pointer argument points to.
+#+begin_src cpp :main no
+#include <iostream>
+
+void nullify(int*& refptr) // refptr is now a reference to a pointer
+{
+    refptr = nullptr; // Make the function parameter a null pointer
+}
+
+int main()
+{
+    int x{ 5 };
+    int* ptr{ &x }; // ptr points to x
+
+    std::cout << "ptr is " << (ptr ? "non-null\n" : "null\n");
+
+    nullify(ptr);
+
+    std::cout << "ptr is " << (ptr ? "non-null\n" : "null\n");
+    return 0;
+}
+#+end_src
 * Next
-https://www.learncpp.com/cpp-tutorial/implicit-type-conversion/
+https://www.learncpp.com/cpp-tutorial/return-by-reference-and-return-by-address/

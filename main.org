@@ -2077,6 +2077,192 @@ std::expected (introduced in C++23) is designed to handle the case where a funct
 Prefer std::optional for optional return types.
 
 Prefer function overloading for optional function parameters (when possible). Otherwise, use std::optional<T> for optional arguments when T would normally be passed by value. Favor const T* when T is expensive to copy.
+* Compound Types: Enums and Structs
+** Unscoped enumerations
+Name your enumerated types starting with a capital letter. Name your enumerators starting with a lower case letter.
 
+Prefer putting your enumerations inside a named scope region (such as a namespace or class) so the enumerators don’t pollute the global namespace.
+** Unscoped enumerator integral conversions
+Avoid assigning explicit values to your enumerators unless you have a compelling reason to do so.
+
+Make the enumerator representing 0 the one that is the best default meaning for your enumeration. If no good default meaning exists, consider adding an “invalid” or “unknown” enumerator that has value 0, so that state is explicitly documented and can be explicitly handled where appropriate.
+
+Specify the base type of an enumeration only when necessary.
+Because std::int8_t and std::uint8_t are usually type aliases for char types, using either of these types as the enum base will most likely cause the enumerators to print as char values rather than int values.
+
+As of C++17, if an unscoped enumeration has an explicitly specified base, then the compiler will allow you to list initialize an unscoped enumeration using an integral value:(Or static_cast)
+#+begin_src cpp :main no
+enum Pet: int // we've specified a base
+{
+    cat, // assigned 0
+    dog, // assigned 1
+    pig, // assigned 2
+    whale, // assigned 3
+};
+
+int main()
+{
+    Pet pet1 { 2 }; // ok: can brace initialize unscoped enumeration with specified base with integer (C++17)
+    Pet pet2 (2);   // compile error: cannot direct initialize with integer
+    Pet pet3 = 2;   // compile error: cannot copy initialize with integer
+
+    pet1 = 3;       // compile error: cannot assign with integer
+
+    return 0;
+}
+#+end_src
+** Scoped enumerations (enum classes)
+Favor scoped enumerations over unscoped enumerations unless there’s a compelling reason to do otherwise.
+*** convert a scoped enumerator to an integer
+#+begin_src cpp :main no
+#include <iostream>
+#include <utility> // for std::to_underlying() (C++23)
+
+int main()
+{
+    enum class Color
+    {
+        red,
+        blue,
+    };
+
+    Color color { Color::blue };
+
+    std::cout << color << '\n'; // won't work, because there's no implicit conversion to int
+    std::cout << static_cast<int>(color) << '\n';   // explicit conversion to int, will print 1
+    std::cout << std::to_underlying(color) << '\n'; // convert to underlying type, will print 1 (C++23)
+
+    return 0;
+}
+#+end_src
+** Struct aggregate initialization
+*** Overloading operator<< to print a struct && Designated initializers
+When adding a new member to an aggregate, it’s safest to add it to the bottom of the definition list so the initializers for other members don’t shift.
+#+begin_src cpp
+#include <iostream>
+
+struct Employee
+{
+    int id {};
+    int age {};
+    double wage {};
+};
+
+std::ostream& operator<<(std::ostream& out, const Employee& e)
+{
+    out << "id: " << e.id << " age: " << e.age << " wage: " << e.wage;
+    return out;
+}
+
+int main()
+{
+    Employee joe { .id{2}, .age{28} }; // joe.wage will be value-initialized to 0.0
+    std::cout << joe << '\n';
+
+    return 0;
+}
+#+end_src
+*** default member initialization
+Provide a default value for all members. This ensures that your members will be initialized even if the variable definition doesn’t include an initializer list.
+
+For aggregates, prefer value initialization (with an empty braces initializer) to default initialization (with no braces).
+** struct miscellany
+In most cases, we want our structs (and classes) to be owners. The easiest way to enable this is to ensure each data member has an owning type (e.g. not a viewer, pointer, or reference).
+
+You can minimize padding by defining your members in decreasing order of size.
+** member selection with pointer and reference
+When using a pointer to access a member, use the member selection from pointer operator (->) instead of the member selection operator (.).
+** Class template argument deduction (CTAD) and deduction guides
+*** Type template parameters with default values
+#+begin_src cpp
+template <typename T=int, typename U=int> // default T and U to type int
+struct Pair
+{
+    T first{};
+    U second{};
+};
+
+template <typename T, typename U>
+Pair(T, U) -> Pair<T, U>;
+
+int main()
+{
+    Pair<int, int> p1{ 1, 2 }; // explicitly specify class template Pair<int, int> (C++11 onward)
+    Pair p2{ 1, 2 };           // CTAD used to deduce Pair<int, int> from the initializers (C++17)
+
+    Pair p3;                   // uses default Pair<int, int>
+
+    return 0;
+}
+#+end_src
+*** CTAD doesn’t work with non-static member initialization
+#+begin_src cpp
+#include <utility> // for std::pair
+
+struct Foo
+{
+    std::pair<int, int> p1{ 1, 2 }; // ok, template arguments explicitly specified
+    std::pair p2{ 1, 2 };           // compile error, CTAD can't be used in this context
+};
+
+int main()
+{
+    std::pair p3{ 1, 2 };           // ok, CTAD can be used here
+    return 0;
+}
+*** CTAD doesn’t work with function parameters
+In such cases, you should use a template instead
+#+begin_src cpp
+#include <iostream>
+#include <utility>
+
+void print(std::pair p) // compile error, CTAD can't be used here
+{
+    std::cout << p.first << ' ' << p.second << '\n';
+}
+
+int main()
+{
+    std::pair p { 1, 2 }; // p deduced to std::pair<int, int>
+    print(p);
+
+    return 0;
+}
+#+end_src
+#+end_src
+** Alias templates
+#+begin_src cpp
+#include <iostream>
+
+template <typename T>
+struct Pair
+{
+    T first{};
+    T second{};
+};
+
+// Here's our alias template
+// Alias templates must be defined in global scope
+template <typename T>
+using Coord = Pair<T>; // Coord is an alias for Pair<T>
+
+// Our print function template needs to know that Coord's template parameter T is a type template parameter
+template <typename T>
+void print(const Coord<T>& c)
+{
+    std::cout << c.first << ' ' << c.second << '\n';
+}
+
+int main()
+{
+    Coord<int> p1 { 1, 2 }; // Pre C++-20: We must explicitly specify all type template argument
+    Coord p2 { 1, 2 };      // In C++20, we can use alias template deduction to deduce the template arguments in cases where CTAD works
+
+    std::cout << p1.first << ' ' << p1.second << '\n';
+    print(p2);
+
+    return 0;
+}
+#+end_src
 * Next
 https://www.learncpp.com/cpp-tutorial/introduction-to-program-defined-user-defined-types/

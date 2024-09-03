@@ -2265,4 +2265,4 @@ int main()
 }
 #+end_src
 * Next
-https://www.learncpp.com/cpp-tutorial/introduction-to-program-defined-user-defined-types/
+https://www.learncpp.com/cpp-tutorial/introduction-to-object-oriented-programming/

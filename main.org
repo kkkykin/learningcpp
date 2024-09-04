@@ -2264,5 +2264,167 @@ int main()
     return 0;
 }
 #+end_src
+* Introduction to Classes
+** Member functions
+With non-member functions, we have to explicitly pass an object to the function to work with, and members are explicitly accessed through that object.
+
+With member functions, we implicitly pass an object to the function to work with, and members are implicitly accessed through that object.
+
+Avoid using other members inside default member initializers.
+** Structs and member functions
+Member functions can be used with both structs and classes.
+
+However, structs should avoid defining constructor member functions, as doing so makes them a non-aggregate.
+
+If your class type has no data members, prefer using a namespace.
+** Const class objects and const member functions
+Const objects may not call non-const member functions
+
+A member function that does not (and will not ever) modify the state of the object should be made const, so that it can be called on both const and non-const objects.
+
+Be careful about what member functions you apply const to. Once a member function is made const, that function can be called on const objects. Later removal of const on a member function will break any code that calls that member function on a const object.
+
+Member function const and non-const overloading
+** Public and private members and access specifiers
+Consider naming your private data members starting with an “m_” prefix to help distinguish them from the names of local variables, function parameters, and member functions.
+
+Public members of classes may also follow this convention if desired. However, the public members of structs typically do not use this prefix since structs generally do not have many member functions (if any).
+
+*** access level summary
+| Access level | Access specifier | Member access | Derived class access | Public access |
+|--------------+------------------+---------------+----------------------+---------------|
+| Public       | public:          | yes           | yes                  | yes           |
+| Protected    | protected:       | yes           | yes                  | no            |
+| Private      | private:         | yes           | no                   | no            |
+
+Classes should generally make member variables private (or protected), and member functions public.
+
+Structs should generally avoid using access specifiers (all members will default to public).
+
+** Access functions
+- If your class has no invariants and requires a lot of access functions, consider using a struct (whose data members are public) and providing direct access to members instead.
+- Prefer implementing behaviors or actions instead of access functions. For example, instead of a setAlive(bool) setter, implement a kill() and a revive() function.
+- Only provide access functions in cases where the public would reasonably need to get or set the value of an individual member.
+
+** Member function return by ref
+A member function returning a reference should return a reference of the same type as the data member being returned, to avoid unnecessary conversions.
+
+An rvalue object is destroyed at the end of the full expression in which it is created. Any references to members of the rvalue object are left dangling at that point.
+
+A reference to a member of an rvalue object can only be safely used within the full expression where the rvalue object is created.
+
+Prefer to use the return value of a member function that returns by reference immediately, to avoid issues with dangling references when the implicit object is an rvalue.
+
+** encapsulation
+Prefer implementing functions as non-members when possible (especially functions that contain application specific data or logic).
+
+Declare public members first, protected members next, and private members last. This spotlights the public interface and de-emphasizes implementation details.
+
+** constructor member initializer lists
+Member variables in a member initializer list should be listed in order that they are defined in the class.
+
+Prefer using the member initializer list to initialize your members over assigning values in the body of the constructor.
+
+** default constructor and default arguments
+Prefer an explicitly defaulted default constructor (= default) over a default constructor with an empty body.
+
+** delegating constructors
+Constructors should not be called directly from the body of another function. Doing so will either result in a compilation error, or will value initialize a temporary object and then discard it (which likely isn’t what you want).
+
+If you have multiple constructors, consider whether you can use delegating constructors to reduce duplicate code.
+
+Members for which the user must provide initialization values should be defined first (and as the leftmost parameters of the constructor). Members for which the user can optionally provide initialization values (because the default values are acceptable) should be defined second (and as the rightmost parameters of the constructor).
+
+The best way to do this is to use a static constexpr member inside the class:
+#+begin_src cpp :main no
+#include <iostream>
+#include <string>
+#include <string_view>
+
+class Employee
+{
+private:
+    static constexpr int default_id { 0 }; // define a named constant with our desired initialization value
+
+    std::string m_name{};
+    int m_id{ default_id }; // we can use it here
+
+public:
+
+    Employee(std::string_view name, int id = default_id) // and we can use it here
+        : m_name{ name }, m_id{ id }
+    {
+        std::cout << "Employee " << m_name << " created\n";
+    }
+};
+
+int main()
+{
+    Employee e1{ "James" };
+    Employee e2{ "Dave", 42 };
+}
+#+end_src
+
+** Introduction to the copy constructor
+Copy constructors should have no side effects beyond copying.
+Prefer the implicit copy constructor, unless you have a specific reason to create your own.
+If you write your own copy constructor, the parameter should be a const lvalue reference.
+
+Using = default to generate a default copy constructor.
+Using = delete to prevent copies.
+
+** Class initialization and copy elision
+Copy elision is a compiler optimization technique that allows the compiler to remove unnecessary copying of objects.
+
+** Converting constructors and the explicit keyword
+Make any constructor that accepts a single argument explicit by default. If an implicit conversion between types is both semantically equivalent and performant, you can consider making the constructor non-explicit.
+
+Do not make copy or move constructors explicit, as these do not perform conversions.
+
+** constexpre aggregates and classes
+If you want your class to be able to be evaluated at compile-time, make your member functions and constructor constexpr.
+Constexpr is part of the interface of the class, and removing it later will break callers who are calling the function in a constant context.
+* More on Classes
+** Classes and header files
+Prefer to put your class definitions in a header file with the same name as the class. Trivial member functions (such as access functions, constructors with empty bodies, etc…) can be defined inside the class definition.
+
+Prefer to define non-trivial member functions in a source file with the same name as the class.
+
+Functions defined inside the class definition are implicitly inline, which allows them to be #included into multiple code files without violating the ODR.
+
+Functions defined outside the class definition are not implicitly inline. They can be made inline by using the inline keyword.
+
+Put any default arguments for member functions inside the class definition.
+** nested types member types
+Define any nested types at the top of your class type.
+** class templates with member functions
+Any member function templates defined outside the class definition should be defined just below the class definition (in the same file).
+*** Injected class names
+Pair is the injected class name of Pair<T>, within the scope of our Pair<T> class template, any use of Pair will be treated as if we had written Pair<T> instead.
+** static member variables
+Static member variables are member variables that belong to the class rather than objects of the class.
+
+Access static members using the class name and the scope resolution operator (::).
+
+Make your static members inline or constexpr so they can be initialized inside the class definition.
+
+Non-static members may not use auto or CTAD.
+** Static member functions
+Static member functions have no *this pointer.
+C++ does not support static constructors
+
+*** Pure static classes vs namespaces
+In general, a static class is preferable when you have static data members and/or need access controls. Otherwise, prefer a namespace.
+** friend non member functions
+Friendship is always granted by the class whose members will be accessed (not by the class or function desiring access). Between access controls and granting friendship, a class always retains the ability to control who can access its members.
+
+A friend function should prefer to use the class interface over direct access whenever possible.
+
+Prefer to implement a function as a non-friend when possible and reasonable.
+** Friend classes and friend member function
+Nor is friendship inherited. If class A makes B a friend, classes derived from B are not friends of A.
+
+Friend member function need notice declaration order if define in single file.
+
 * Next
-https://www.learncpp.com/cpp-tutorial/introduction-to-object-oriented-programming/
+https://www.learncpp.com/cpp-tutorial/friend-classes-and-friend-member-functions/

@@ -2425,6 +2425,169 @@ Prefer to implement a function as a non-friend when possible and reasonable.
 Nor is friendship inherited. If class A makes B a friend, classes derived from B are not friends of A.
 
 Friend member function need notice declaration order if define in single file.
+* Dynamic arrays: std::vector
+** Introduction to std::vector and list constructors
+When constructing a container (or any type that has a list constructor) with initializers that are not element values, use direct initialization.
+*** When a std::vector is a member of a class type
+
+We must use either copy initialization or list initialization (direct or copy).
+CTAD is not allowed (so we must explicitly specify the element type).
+
+#+begin_src cpp
+struct Foo
+{
+    std::vector<int> v{ std::vector<int>(8) }; // ok
+};
+#+end_src
+*** cosnt and constexpr std::vector
+A const std::vector must be initialized, and then cannot be modified. The elements of such a vector are treated as if they were const.
+
+The element type of a std::vector must not be defined as const (e.g. std::vector<const int> is disallowed).
+
+One of the biggest downsides of std::vector is that it cannot be made constexpr. If you need a constexpr array, use std::array.
+** std::vector and the unsigned length and subscript problem
+use std::ssize() or std::size() instead of size();
+
+** Returning std::vector, and an introduction to move semantics
+std::vector and std::string both support move semantics.
+
+To summarize, for move-capable types, we prefer to pass by const reference, and return by value.
+
+** Arrays, loops, and sign challenge solutions
+Because size_type is almost always a typedef for size_t, many programmers just skip using size_type altogether and use the easier to remember and type std::size_t directly.
+
+Or std::vector<int>::size_type;
+
+*** What signed type should we use?
+If you are dealing with very large arrays, or if you want to be a bit more defensive, you can use the strangely named std::ptrdiff_t. This typedef is often used as the signed counterpart to std::size_t.
+
+In C++23, the Z suffix can be used to define a literal of the type that is the signed counterpart to std::size_t (probably std::ptrdiff_t):
+#+begin_src cpp
+for (auto index{ 0Z }; index < static_cast<std::ptrdiff_t>(arr.size()); ++index)
+#+end_src
+
+If you want more evidence that the designers of C++ now believe that signed indices are the way to go, consider the introduction of std::ssize() in C++20. This function returns the size of an array type as a signed type (likely ptrdiff_t).
+
+Avoid array indexing with integral values whenever possible.
+
+** Range-based for loops (for-each)
+Favor range-based for loops over regular for-loops when traversing containers.
+
+Use type deduction (auto) with range-based for loops to have the compiler deduce the type of the array element.
+
+Avoid element copies using references.
+
+*** For range-based for loops, prefer to define the element type as:
+- auto when you want to modify copies of the elements.
+- auto& when you want to modify the original elements.
+- const auto& otherwise (when you just need to view the original elements).
+
+*** Range-based for loops in reverse
+As of C++20, you can use the std::views::reverse capability of the Ranges library to create a reverse view of the elements that can be traversed:  
+#+begin_src cpp :main no
+#include <iostream>
+#include <ranges> // C++20
+#include <string_view>
+#include <vector>
+
+int main()
+{
+    std::vector<std::string_view> words{ "Alex", "Bobby", "Chad", "Dave" }; // sorted in alphabetical order
+
+    for (const auto& word : std::views::reverse(words)) // create a reverse view
+        std::cout << word << ' ';
+
+    std::cout << '\n';
+
+    return 0;
+}
+#+end_src
+
+** Array indexing and length using enumerators
+Use a static_assert to ensure the length of your constexpr array matches your count enumerator.
+Use an assert to ensure the length of your non-constexpr array matches your count enumerator.
+
+If you’re going to be doing a lot of enumerator to integral conversions, it’s probably better to just use a standard enum inside a namespace (or class).
+
+** std::vector resizing and capacity
+The length of a vector is how many elements are “in use”.
+The capacity of a vector is how many elements have been allocated in memory.
+
+Reallocation is typically expensive. Avoid unnecessary reallocations.
+
+A subscript is only valid if it is between 0 and the vector’s length (not its capacity)!
+
+** std::vector and stack behavior
+| Function Name  | Stack Operation | Behavior                                                             | Notes                                          |
+|----------------+-----------------+----------------------------------------------------------------------+------------------------------------------------|
+| push_back()    | Push            | Put new element on top of stack                                      | Adds the element to end of vector              |
+| pop_back()     | Pop             | Remove the top element from the stack                                | Returns void, removes element at end of vector |
+| back()         | Top or Peek     | Get the top element on the stack                                     | Does not remove item                           |
+| emplace_back() | Push            | Alternate form of push_back() that can be more efficient (see below) | Adds element to end of vector                  |
+
+push_back() and emplace_back() will increment the length of a std::vector, and will cause a reallocation to occur if the capacity is not sufficient to insert the value.
+
+The resize() member function changes the length of the vector, and the capacity (if necessary).
+The reserve() member function changes just the capacity (if necessary)
+
+Use resize() when accessing a vector via indexing. This changes the length of the vector so your indices will be valid.
+Use reserve() when accessing a vector using stack operations. This adds capacity without changing the length of the vector.
+
+*** push_back() vs emplace_back()
+Both push_back() and emplace_back() push an element onto the stack. If the object to be pushed already exists, push_back() and emplace_back() are equivalent, and push_back() should be preferred.
+
+However, in cases where we are creating a temporary object (of the same type as the vector’s element) for the purpose of pushing it onto the vector, emplace_back() can be more efficient:
+
+#+begin_src cpp :main no
+#include <iostream>
+#include <string>
+#include <string_view>
+#include <vector>
+
+class Foo
+{
+private:
+    std::string m_a{};
+    int m_b{};
+
+public:
+    Foo(std::string_view a, int b)
+        : m_a { a }, m_b { b }
+        {}
+
+    explicit Foo(int b)
+        : m_a {}, m_b { b }
+        {};
+};
+
+int main()
+{
+	std::vector<Foo> stack{};
+
+	// When we already have an object, push_back and emplace_back are similar in efficiency
+	Foo f{ "a", 2 };
+	stack.push_back(f);    // prefer this one
+	stack.emplace_back(f);
+
+	// When we need to create a temporary object to push, emplace_back is more efficient
+	stack.push_back({ "a", 2 }); // creates a temporary object, and then copies it into the vector
+	stack.emplace_back("a", 2);  // forwards the arguments so the object can be created directly in the vector (no copy made)
+
+	// push_back won't use explicit constructors, emplace_back will
+	stack.push_back({ 2 }); // compile error: Foo(int) is explicit
+	stack.emplace_back(2);  // ok
+
+	return 0;
+}
+#+end_src
+
+Prefer emplace_back() when creating a new temporary object to add to the container, or when you need to access an explicit constructor.
+Prefer push_back() otherwise.
+
+** std::vector<bool>
+The modern consensus is that std::vector<bool> should generally be avoided, as the performance gains are unlikely to be worth the incompatibility headaches due to it not being a proper container.
+
+Favor constexpr std::bitset, std::vector<char>, or 3rd party dynamic bitsets over std::vector<bool>.
 
 * Next
-https://www.learncpp.com/cpp-tutorial/introduction-to-containers-and-arrays/
+https://www.learncpp.com/cpp-tutorial/stdvector-and-stack-behavior/

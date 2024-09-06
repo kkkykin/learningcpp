@@ -2588,6 +2588,48 @@ Prefer push_back() otherwise.
 The modern consensus is that std::vector<bool> should generally be avoided, as the performance gains are unlikely to be worth the incompatibility headaches due to it not being a proper container.
 
 Favor constexpr std::bitset, std::vector<char>, or 3rd party dynamic bitsets over std::vector<bool>.
+* Fixed-size arrays: std::array and C-style arrays
+** Introduction to std::array
+Use std::array for constexpr arrays, and std::vector for non-constexpr arrays.
+Perhaps surprisingly, a std::array can be defined with a length of 0.
+
+Define your std::array as constexpr whenever possible. If your std::array is not constexpr, consider using a std::vector instead.
+
+Use class template argument deduction (CTAD) to have the compiler deduce the type and length of a std::array from its initializers.
+*** Omitting just the array length using std::to_array
+#+begin_src cpp
+#include <array>
+#include <iostream>
+
+int main()
+{
+    constexpr auto myArray1 { std::to_array<int, 5>({ 9, 7, 5, 3, 1 }) }; // Specify type and size
+    constexpr auto myArray2 { std::to_array<int>({ 9, 7, 5, 3, 1 }) };    // Specify type only, deduce size
+    constexpr auto myArray3 { std::to_array({ 9, 7, 5, 3, 1 }) };         // Deduce type and size
+
+    return 0;
+}
+#+end_src
+Unfortunately, using std::to_array is more expensive than creating a std::array directly, because it involves creation of a temporary std::array that is then used to copy initialize our desired std::array. For this reason, std::to_array should only be used in cases where the type can’t be effectively determined from the initializers, and should be avoided when an array is created many times (e.g. inside a loop).
+** std::array of class types, and brace elision
+When initializing a std::array with a struct, class, or array and not providing the element type with each initializer, you’ll need an extra pair of braces so that the compiler will properly interpret what to initialize.
+
+This is an artifact of aggregate initialization, and other standard library container types (that use list constructors) do not require the double braces in these cases.
+** Arrays of references via std::reference_wrapper
+*** std::reference_wrapper
+std::reference_wrapper is a standard library class template that lives in the <functional> header. It takes a type template argument T, and then behaves like a modifiable lvalue reference to T.
+
+#+begin_src cpp
+std::reference_wrapper ref1 { x };        // C++17
+auto ref2 { std::reference_wrapper{ x }}; // C++17
+#+end_src
+
+*** std::ref and std::cref
+#+begin_src cpp
+int x { 5 };
+auto ref { std::ref(x) };   // C++11, deduces to std::reference_wrapper<int>
+auto cref { std::cref(x) }; // C++11, deduces to std::reference_wrapper<const int>
+#+end_src
 
 * Next
-https://www.learncpp.com/cpp-tutorial/stdvector-and-stack-behavior/
+https://www.learncpp.com/cpp-tutorial/stdarray-and-enumerations/

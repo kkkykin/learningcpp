@@ -2630,6 +2630,138 @@ int x { 5 };
 auto ref { std::ref(x) };   // C++11, deduces to std::reference_wrapper<int>
 auto cref { std::cref(x) }; // C++11, deduces to std::reference_wrapper<const int>
 #+end_src
+** Introduction to C-style arrays
+Prefer omitting the length of a C-style array when explicitly initializing every array element with a value.
+** C-style array decay
+A function parameter expecting a C-style array type should use the array syntax (e.g. int arr[]) rather than pointer syntax (e.g. int *arr).
 
+Avoid C-style arrays whenever practical.
+Prefer std::string_view for read-only strings (string literal symbolic constants and string parameters).
+Prefer std::string for modifiable strings.
+Prefer std::array for non-global constexpr arrays.
+Prefer std::vector for non-constexpr arrays.
+It is okay to use C-style arrays for global constexpr arrays.
+** Pointer arithmetic and subscripting
+Favor subscripting when indexing from the start of the array (element 0), so the array indices line up with the element.
+
+Favor pointer arithmetic when doing relative positioning from a given element.
+** C-style strings
+Avoid non-const C-style string objects in favor of std::string.
+*** Inputting C-style strings
+#+begin_src cpp :main no
+#include <iostream>
+#include <iterator> // for std::size
+
+int main()
+{
+    char rolls[255] {}; // declare array large enough to hold 254 characters + null terminator
+    std::cout << "Enter your rolls: ";
+    std::cin.getline(rolls, std::size(rolls));
+    std::cout << "You entered: " << rolls << '\n';
+
+    return 0;
+}
+#+end_src
+*** Getting the length of an C-style string
+Use the strlen() function, which lives in the <cstring> header.
+*** Other C-style string manipulating functions
+- strlen() -- returns the length of a C-style string
+- strcpy(), strncpy(), strcpy_s() -- overwrites one C-style string with another
+- strcat(), strncat() -- Appends one C-style string to the end of another
+- strcmp(), strncmp() -- Compares two C-style strings (returns 0 if equal)
+
+Except for strlen(), we generally recommend avoiding these.
+** C-style string symbolic constants
+Avoid C-style string symbolic constants in favor of constexpr std::string_view.
+** Multidimensional C-style Arrays
+An initialized multidimensional array can omit (only) the leftmost length specification.
+** Multidimensional std::array
+#+begin_src cpp :main no
+#include <array>
+#include <iostream>
+
+// An alias template for a two-dimensional std::array
+template <typename T, std::size_t Row, std::size_t Col>
+using Array2d = std::array<std::array<T, Col>, Row>;
+
+// Fetch the number of rows from the Row non-type template parameter
+template <typename T, std::size_t Row, std::size_t Col>
+constexpr int rowLength(const Array2d<T, Row, Col>&) // you can return std::size_t if you prefer
+{
+    return Row;
+}
+
+// Fetch the number of cols from the Col non-type template parameter
+template <typename T, std::size_t Row, std::size_t Col>
+constexpr int colLength(const Array2d<T, Row, Col>&) // you can return std::size_t if you prefer
+{
+    return Col;
+}
+
+int main()
+{
+    // Define a two-dimensional array of int with 3 rows and 4 columns
+    Array2d<int, 3, 4> arr {{
+        { 1, 2, 3, 4 },
+        { 5, 6, 7, 8 },
+        { 9, 10, 11, 12 }}};
+
+    std::cout << "Rows: " << rowLength(arr) << '\n'; // get length of first dimension (rows)
+    std::cout << "Cols: " << colLength(arr) << '\n'; // get length of second dimension (cols)
+
+    return 0;
+}
+#+end_src
+** Multidimensional std::array
+Introduced in C++23, std::mdspan is a modifiable view that provides a multidimensional array interface for a contiguous sequence of elements.
+#+begin_src cpp :main no
+#include <array>
+#include <iostream>
+#include <mdspan>
+
+// An alias template to allow us to define a one-dimensional std::array using two dimensions
+template <typename T, std::size_t Row, std::size_t Col>
+using ArrayFlat2d = std::array<T, Row * Col>;
+
+int main()
+{
+    // Define a one-dimensional std::array of int (with 3 rows and 4 columns)
+    ArrayFlat2d<int, 3, 4> arr {
+        1, 2, 3, 4,
+        5, 6, 7, 8,
+        9, 10, 11, 12 };
+
+    // Define a two-dimensional span into our one-dimensional array
+    // We must pass std::mdspan a pointer to the sequence of elements
+    // which we can do via the data() member function of std::array or std::vector
+    std::mdspan mdView { arr.data(), 3, 4 };
+
+    // print array dimensions
+    // std::mdspan calls these extents
+    std::size_t rows { mdView.extents().extent(0) };
+    std::size_t cols { mdView.extents().extent(1) };
+    std::cout << "Rows: " << rows << '\n';
+    std::cout << "Cols: " << cols << '\n';
+
+    // print array in 1d
+    // The data_handle() member gives us a pointer to the sequence of elements
+    // which we can then index
+    for (std::size_t i=0; i < mdView.size(); ++i)
+        std::cout << mdView.data_handle()[i] << ' ';
+    std::cout << '\n';
+
+    // print array in 2d
+    // We use multidimensional [] to access elements
+    for (std::size_t row=0; row < rows; ++row)
+    {
+        for (std::size_t col=0; col < cols; ++col)
+            std::cout << mdView[row, col] << ' ';
+        std::cout << '\n';
+    }
+    std::cout << '\n';
+
+    return 0;
+}
+#+end_src
 * Next
 https://www.learncpp.com/cpp-tutorial/stdarray-and-enumerations/

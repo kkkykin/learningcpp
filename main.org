@@ -2763,5 +2763,269 @@ int main()
     return 0;
 }
 #+end_src
+* Iterators and Algorithms (under construction)
+** Introduction to iterators
+Using operator< was preferred over operator!= when doing numeric comparisons in the loop condition.
+With iterators, it is conventional to use operator!= to test whether the iterator has reached the end element.
+** Introduction to standard library algorithms
+Before using a particular algorithm, make sure performance and execution order guarantees work for your particular use case.
+Favor using functions from the algorithms library over writing your own functionality to do the same thing.
+** Timing your code
+Make sure you’re using a release build target, not a debug build target. Debug build targets typically turn optimization off, and that optimization can have a significant impact on the results.
+#+begin_src cpp :main no
+#include <algorithm> // for std::sort
+#include <array>
+#include <chrono> // for std::chrono functions
+#include <cstddef> // for std::size_t
+#include <iostream>
+#include <numeric> // for std::iota
+
+const int g_arrayElements { 10000 };
+
+class Timer
+{
+private:
+    // Type aliases to make accessing nested type easier
+    using Clock = std::chrono::steady_clock;
+    using Second = std::chrono::duration<double, std::ratio<1> >;
+
+    std::chrono::time_point<Clock> m_beg{ Clock::now() };
+
+public:
+
+    void reset()
+    {
+        m_beg = Clock::now();
+    }
+
+    double elapsed() const
+    {
+        return std::chrono::duration_cast<Second>(Clock::now() - m_beg).count();
+    }
+};
+
+int main()
+{
+    std::array<int, g_arrayElements> array;
+    std::iota(array.rbegin(), array.rend(), 1); // fill the array with values 10000 to 1
+
+    Timer t;
+
+    std::ranges::sort(array); // Since C++20
+    // If your compiler isn't C++20-capable
+    // std::sort(array.begin(), array.end());
+
+    std::cout << "Time taken: " << t.elapsed() << " seconds\n";
+
+    return 0;
+}
+#+end_src
+* Dynamic Allocation (under construction)
+** Dynamic memory allocation with new and delete
+#+begin_src cpp
+int* ptr1{ new int (5) }; // use direct initialization
+int* ptr2{ new int { 6 } }; // use uniform initialization
+
+// assume ptr has previously been allocated with operator new
+delete ptr; // return the memory pointed to by ptr to the operating system
+ptr = nullptr; // set ptr to be a null pointer
+#+end_src
+The delete operator does not actually delete anything. It simply returns the memory being pointed to back to the operating system. The operating system is then free to reassign that memory to another application (or to this application again later).
+
+Although it looks like we’re deleting a variable, this is not the case! The pointer variable still has the same scope as before, and can be assigned a new value just like any other variable.
+
+Note that deleting a pointer that is not pointing to dynamically allocated memory may cause bad things to happen.
+
+Set deleted pointers to nullptr unless they are going out of scope immediately afterward.
+*** Operator new can fail
+#+begin_src cpp
+int* value { new (std::nothrow) int{} }; // ask for an integer's worth of memory
+if (!value) // handle case where new returned null
+{
+    // Do error handling here
+    std::cerr << "Could not allocate memory\n";
+}
+#+end_src
+*** Null pointers and dynamic memory allocation
+Deleting a null pointer is okay, and does nothing. There is no need to conditionalize your delete statements.
+*** Memory leaks
+Avoided by ensuring you delete the pointer before reassigning.
+** Dynamically allocating arrays
+While you can dynamically allocate a std::array, you’re usually better off using a non-dynamically allocated std::vector in this case.
+#+begin_src cpp
+int fixedArray[5] = { 9, 7, 5, 3, 1 }; // initialize a fixed array before C++11
+int* array{ new int[5]{ 9, 7, 5, 3, 1 } }; // initialize a dynamic array since C++11
+// To prevent writing the type twice, we can use auto. This is often done for types with long names.
+auto* array{ new int[5]{ 9, 7, 5, 3, 1 } };
+
+delete[] array; // use array delete to deallocate array
+#+end_src
+** Pointers to pointers and dynamic multidimensional arrays
+*** Two-dimensional dynamically allocated arrays
+**** If the rightmost array dimension is constexpr, you can do this:
+#+begin_src cpp
+int x { 7 }; // non-constant
+auto array { new int[x][5] }; // rightmost dimension must be constexpr
+#+end_src
+**** triangle-shaped array
+#+begin_src cpp
+int** array { new int*[10] }; // allocate an array of 10 int pointers — these are our rows
+for (int count { 0 }; count < 10; ++count)
+    array[count] = new int[count+1]; // these are our columns
+
+for (int count { 0 }; count < 10; ++count)
+    delete[] array[count];
+delete[] array; // this needs to be done last
+#+end_src
+** Void pointers
+The void pointer, also known as the generic pointer, is a special type of pointer that can be pointed at objects of any data type! A void pointer is declared like a normal pointer, using the void keyword as the pointer’s type:
+#+begin_src cpp
+void* ptr {}; // ptr is a void pointer
+#+end_src
+However, because the void pointer does not know what type of object it is pointing to, dereferencing a void pointer is illegal. Instead, the void pointer must first be cast to another pointer type before the dereference can be performed.
+#+begin_src cpp
+int value{ 5 };
+void* voidPtr{ &value };
+
+// std::cout << *voidPtr << '\n'; // illegal: dereference of void pointer
+
+int* intPtr{ static_cast<int*>(voidPtr) }; // however, if we cast our void pointer to an int pointer...
+
+std::cout << *intPtr << '\n'; // then we can dereference the result
+#+end_src
+
+If a void pointer doesn’t know what it’s pointing to, how do we know what to cast it to? Ultimately, that is up to you to keep track of.
+
+#+begin_src cpp
+#include <cassert>
+#include <iostream>
+
+enum class Type
+{
+    tInt, // note: we can't use "int" here because it's a keyword, so we'll use "tInt" instead
+    tFloat,
+    tCString
+};
+
+void printValue(void* ptr, Type type)
+{
+    switch (type)
+    {
+    case Type::tInt:
+        std::cout << *static_cast<int*>(ptr) << '\n'; // cast to int pointer and perform indirection
+        break;
+    case Type::tFloat:
+        std::cout << *static_cast<float*>(ptr) << '\n'; // cast to float pointer and perform indirection
+        break;
+    case Type::tCString:
+        std::cout << static_cast<char*>(ptr) << '\n'; // cast to char pointer (no indirection)
+        // std::cout will treat char* as a C-style string
+        // if we were to perform indirection through the result, then we'd just print the single char that ptr is pointing to
+        break;
+    default:
+        std::cerr << "printValue(): invalid type provided\n";
+        assert(false && "type not found");
+        break;
+    }
+}
+
+int main()
+{
+    int nValue{ 5 };
+    float fValue{ 7.5f };
+    char szValue[]{ "Mollie" };
+
+    printValue(&nValue, Type::tInt);
+    printValue(&fValue, Type::tFloat);
+    printValue(szValue, Type::tCString);
+
+    return 0;
+}
+#+end_src
+
+Avoid using void pointers unless absolutely necessary, as they effectively allow you to avoid type checking.
+* Functions
+** Function Pointers
+#+begin_src cpp
+// fcnPtr is a pointer to a function that takes no arguments and returns an integer
+int (*fcnPtr)();
+int (*const fcnPtr)();
+#+end_src
+*** Assigning a function to a function pointer
+#+begin_src cpp
+// function prototypes
+int foo();
+double goo();
+int hoo(int x);
+
+// function pointer initializers
+int (*fcnPtr1)(){ &foo };    // okay
+int (*fcnPtr2)(){ &goo };    // wrong -- return types don't match!
+double (*fcnPtr4)(){ &goo }; // okay
+fcnPtr1 = &hoo;              // wrong -- fcnPtr1 has no parameters, but hoo() does
+int (*fcnPtr3)(int){ &hoo }; // okay
+#+end_src
+*** Calling a function using a function pointer
+#+begin_src cpp
+int foo(int x)
+{
+    return x;
+}
+
+int main()
+{
+    int (*fcnPtr)(int){ &foo }; // Initialize fcnPtr with function foo
+    if (fcnPtr) // make sure fcnPtr isn't a null pointer
+        fcnPtr(5); // otherwise this will lead to undefined behavior
+
+    return 0;
+}
+#+end_src
+*** Default arguments don’t work for functions called through function pointers 
+Because the resolution happens at runtime, default arguments are not resolved when a function is called through a function pointer.
+*** Passing functions as arguments to other functions
+#+begin_src cpp
+void selectionSort(int* array, int size, bool (*comparisonFcn)(int, int))
+void selectionSort(int* array, int size, bool comparisonFcn(int, int))
+  // Default the sort to ascending sort
+void selectionSort(int* array, int size, bool (*comparisonFcn)(int, int) = ascending);
+#+end_src
+*** Making function pointers prettier with type aliases
+#+begin_src cpp
+using ValidateFunction = bool(*)(int, int);
+bool validate(int x, int y, bool (*fcnPtr)(int, int)); // ugly
+bool validate(int x, int y, ValidateFunction pfcn) // clean
+#+end_src
+*** Using std::function
+#+begin_src cpp
+#include <functional>
+bool validate(int x, int y, std::function<bool(int, int)> fcn); // std::function method that returns a bool and takes two int parameters
+#+end_src
+** The stack and the heap
+The memory that a program uses is typically divided into a few different areas, called segments:
+
+The code segment (also called a text segment), where the compiled program sits in memory. The code segment is typically read-only.
+The bss segment (also called the uninitialized data segment), where zero-initialized global and static variables are stored.
+The data segment (also called the initialized data segment), where initialized global and static variables are stored.
+The heap, where dynamically allocated variables are allocated from.
+The call stack, where function parameters, local variables, and other function-related information are stored.
+*** The heap segment
+Allocating memory on the heap is comparatively slow.
+Allocated memory stays allocated until it is specifically deallocated (beware memory leaks) or the application ends (at which point the OS should clean it up).
+Dynamically allocated memory must be accessed through a pointer. Dereferencing a pointer is slower than accessing a variable directly.
+Because the heap is a big pool of memory, large arrays, structures, or classes can be allocated here.
+*** The call stack segment
+Allocating memory on the stack is comparatively fast.
+Memory allocated on the stack stays in scope as long as it is on the stack. It is destroyed when it is popped off the stack.
+All memory allocated on the stack is known at compile time. Consequently, this memory can be accessed directly through a variable.
+Because the stack is relatively small, it is generally not a good idea to do anything that eats up lots of stack space. This includes allocating or copying large arrays or other memory-intensive structures.
+*** The call stack in action
+When the function terminates, the following steps happen:
+1. Registers are restored from the call stack
+2. The stack frame is popped off the stack. This frees the memory for all local variables and arguments.
+3. The return value is handled.
+4. The CPU resumes execution at the return address.
+*** Stack overflow
+Stack overflow happens when all the memory in the stack has been allocated.
 * Next
-https://www.learncpp.com/cpp-tutorial/stdarray-and-enumerations/
+https://www.learncpp.com/cpp-tutorial/recursion/

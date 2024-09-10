@@ -1075,7 +1075,66 @@ if (!!a != !!b != !!c) // a XOR b XOR c, for any type that can be converted to b
 
 ** Bit Manipulation
 In some storage-intensive cases, maybe need bit manipulation. So i skip it.
+* Bit Manipulation (optional chapter)
+** Bit flags and bit manipulation via std::bitset
+Bit manipulation is one of the few times when you should unambiguously use unsigned integers (or std::bitset).
+*** Manipulating bits via std::bitset
+std::bitset provides 4 key member functions that are useful for doing bit manipulation:
+- test() allows us to query whether a bit is a 0 or 1.
+- set() allows us to turn a bit on (this will do nothing if the bit is already on).
+- reset() allows us to turn a bit off (this will do nothing if the bit is already off).
+- flip() allows us to flip a bit value from a 0 to a 1 or vice versa.
 
+#+begin_src cpp :main no
+#include <bitset>
+#include <iostream>
+
+int main()
+{
+    std::bitset<8> bits{ 0b0000'0101 }; // we need 8 bits, start with bit pattern 0000 0101
+    bits.set(3);   // set bit position 3 to 1 (now we have 0000 1101)
+    bits.flip(4);  // flip bit 4 (now we have 0001 1101)
+    bits.reset(4); // set bit 4 back to 0 (now we have 0000 1101)
+
+    std::cout << "All the bits: " << bits<< '\n';
+    std::cout << "Bit 3 has value: " << bits.test(3) << '\n';
+    std::cout << "Bit 4 has value: " << bits.test(4) << '\n';
+
+    return 0;
+}
+#+end_src
+*** Querying std::bitset
+- size() returns the number of bits in the bitset.
+- count() returns the number of bits in the bitset that are set to true.
+- all() returns a Boolean indicating whether all bits are set to true.
+- any() returns a Boolean indicating whether any bits are set to true.
+- none() returns a Boolean indicating whether no bits are set to true.
+** Bitwise operators
+To avoid surprises, use the bitwise operators with unsigned operands or std::bitset.
+** Bit manipulation with bitwise operators and bit masks
+*** useful bit flags
+Save memory.
+Pass multiple bool options.
+*** how to set, clear, toggle, and query bit flags
+To query bit states, we use bitwise AND:
+#+begin_src cpp
+if (flags & option4) ... // if option4 is set, do something
+#+end_src
+To set bits (turn on), we use bitwise OR:
+#+begin_src cpp
+flags |= option4; // turn option 4 on.
+flags |= (option4 | option5); // turn options 4 and 5 on.
+#+end_src
+To clear bits (turn off), we use bitwise AND with bitwise NOT:
+#+begin_src cpp
+flags &= ~option4; // turn option 4 off
+flags &= ~(option4 | option5); // turn options 4 and 5 off
+#+end_src
+To flip bit states, we use bitwise XOR:
+#+begin_src cpp
+flags ^= option4; // flip option4 from on to off, or vice versa
+flags ^= (option4 | option5); // flip options 4 and 5
+#+end_src
 * Scope, Duration, and Linkage
 
 ** Compound statements
@@ -3027,5 +3086,172 @@ When the function terminates, the following steps happen:
 4. The CPU resumes execution at the return address.
 *** Stack overflow
 Stack overflow happens when all the memory in the stack has been allocated.
+** Recursion
+Generally favor iteration over recursion, except when recursion really makes sense.
+** Command line arguments
+*** Dealing with numeric arguments
+#+begin_src cpp :main no
+#include <iostream>
+#include <sstream> // for std::stringstream
+#include <string>
+
+int main(int argc, char* argv[])
+{
+	if (argc <= 1)
+	{
+		// On some operating systems, argv[0] can end up as an empty string instead of the program's name.
+		// We'll conditionalize our response on whether argv[0] is empty or not.
+		if (argv[0])
+			std::cout << "Usage: " << argv[0] << " <number>" << '\n';
+		else
+			std::cout << "Usage: <program name> <number>" << '\n';
+
+		return 1;
+	}
+
+	std::stringstream convert{ argv[1] }; // set up a stringstream variable named convert, initialized with the input from argv[1]
+
+	int myint{};
+	if (!(convert >> myint)) // do the conversion
+		myint = 0; // if conversion fails, set myint to a default value
+
+	std::cout << "Got integer: " << myint << '\n';
+
+	return 0;
+}
+#+end_src
+** Ellipsis (and why to avoid them)
+#+begin_src cpp :main no
+#include <iostream>
+#include <cstdarg> // needed to use ellipsis
+
+// The ellipsis must be the last parameter
+// count is how many additional arguments we're passing
+double findAverage(int count, ...)
+{
+    int sum{ 0 };
+
+    // We access the ellipsis through a va_list, so let's declare one
+    std::va_list list;
+
+    // We initialize the va_list using va_start.  The first argument is
+    // the list to initialize.  The second argument is the last non-ellipsis
+    // parameter.
+    va_start(list, count);
+
+    // Loop through all the ellipsis values
+    for (int arg{ 0 }; arg < count; ++arg)
+    {
+         // We use va_arg to get values out of our ellipsis
+         // The first argument is the va_list we're using
+         // The second argument is the type of the value
+         sum += va_arg(list, int);
+    }
+
+    // Cleanup the va_list when we're done.
+    va_end(list);
+
+    return static_cast<double>(sum) / count;
+}
+
+int main()
+{
+    std::cout << findAverage(5, 1, 2, 3, 4, 5) << '\n';
+    std::cout << findAverage(6, 1, 2, 3, 4, 5, 6) << '\n';
+
+    return 0;
+}
+#+end_src
+*** ellipsis are dangerous: 
+Type checking is suspended
+ellipsis don’t know how many parameters were passed
+*** fold expression
+Maybe check later.
+** Introduction to lambdas (anonymous functions)
+Following the best practice of defining things in the smallest scope and closest to first use, lambdas are preferred over normal functions when we need a trivial, one-off function to pass as an argument to some other function.
+
+When storing a lambda in a variable, use auto as the variable’s type.
+** Lambda captures
+Lambdas can only access certain kinds of objects that have been defined outside the lambda, including those with static storage duration (e.g. global variables and static locals) and constexpr objects.
+
+Captures are treated as const by default.
+Mutable captures copy a modifiable variable, but not change source. Because captured variables are members of the lambda object, their values are persisted across multiple calls to the lambda!
+Capture by reference modify source value, unless const.
+*** Default captures
+To capture all used variables by value, use a capture value of =.
+To capture all used variables by reference, use a capture value of &.
+
+#+begin_src cpp
+int health{ 33 };
+int armor{ 100 };
+std::vector<CEnemy> enemies{};
+
+// Capture health and armor by value, and enemies by reference.
+[health, armor, &enemies](){};
+
+// Capture enemies by reference and everything else by value.
+[=, &enemies](){};
+
+// Capture armor by value and everything else by reference.
+[&, armor](){};
+
+// Illegal, we already said we want to capture everything by reference.
+[&, &armor](){};
+
+// Illegal, we already said we want to capture everything by value.
+[=, armor](){};
+
+// Illegal, armor appears twice.
+[armor, &health, &armor](){};
+
+// Illegal, the default capture has to be the first element in the capture group.
+[armor, &](){};
+#+end_src
+*** Defining new variables in the lambda-capture
+Only initialize variables in the capture if their value is short and their type is obvious. Otherwise it’s best to define the variable outside of the lambda and capture it.
+#+begin_src cpp
+#include <array>
+#include <iostream>
+#include <algorithm>
+
+int main()
+{
+  std::array areas{ 100, 25, 121, 40, 56 };
+
+  int width{};
+  int height{};
+
+  std::cout << "Enter width and height: ";
+  std::cin >> width >> height;
+
+  // We store areas, but the user entered width and height.
+  // We need to calculate the area before we can search for it.
+  auto found{ std::find_if(areas.begin(), areas.end(),
+                           // Declare a new variable that's visible only to the lambda.
+                           // The type of userArea is automatically deduced to int.
+                           [userArea{ width * height }](int knownArea) {
+                             return userArea == knownArea;
+                           }) };
+
+  if (found == areas.end())
+  {
+    std::cout << "I don't know this area :(\n";
+  }
+  else
+  {
+    std::cout << "Area found :)\n";
+  }
+
+  return 0;
+}
+#+end_src
+*** Dangling captured variables
+Be extra careful when you capture variables by reference, especially with a default reference capture. The captured variables must outlive the lambda.
+
+*** Unintended copies of mutable lambdas 
+Standard library functions may copy function objects (reminder: lambdas are function objects). If you want to provide lambdas with mutable captured variables, pass them by reference using std::ref.
+
+Try to avoid mutable lambdas. Non-mutable lambdas are easier to understand and don’t suffer from the above issues, as well as more dangerous issues that arise when you add parallel execution.
+
 * Next
-https://www.learncpp.com/cpp-tutorial/recursion/
+https://www.learncpp.com/cpp-tutorial/introduction-to-operator-overloading/

@@ -1,20 +1,41 @@
 #include <iostream>
+#include <cassert>
 
 class IntArray {
 private:
-  int *array[1]{};
+  int m_length{0};
+  // 有指针顺带一个长度，初始化为 nullptr
+  int *m_array{ nullptr };
 
 public:
-  IntArray(int x) : array{new int[x]} {};
-  // IntArray(const IntArray &x) : array{new int[x.getLength()]} {}
-  ~IntArray() { delete[] *array; }
-  int &operator[](int x) { return *(array[x]); }
-  int getLength() const { return static_cast<int>(std::size(array)); }
+  explicit IntArray(int x) : m_length{x} {
+    assert(x > 0 && "IntArray length should be a positive integer");
+    m_array = new int[static_cast<std::size_t>(x)] {};
+  }
+  IntArray(const IntArray &x) : m_length{x.m_length} {
+    deepCopy(x);
+  }
+  void deepCopy(const IntArray &x) {
+    m_array = new int[static_cast<std::size_t>(m_length)]{};
+    for (int i{}; i < x.m_length; ++i) {
+      m_array[i] = x.m_array[i];
+    }
+  }
+  ~IntArray() { delete[] m_array; }
+  int &operator[](int x) { return m_array[x]; }
+  int getLength() const { return m_length; }
+  IntArray &operator=(const IntArray &x) {
+    if (this == &x)
+      return *this;
+    m_length = x.m_length;
+    deepCopy(x);
+    return *this;
+  }
 };
 
 std::ostream &operator<<(std::ostream &out, IntArray &a) {
   for (int i{}; i < a.getLength(); ++i) {
-    out << a[i];
+    out << a[i] << ' ';
   }
   return out;
 }

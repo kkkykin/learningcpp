@@ -3605,5 +3605,8 @@ Classes in the standard library that deal with dynamic memory, such as std::stri
 - The default copy constructor and default assignment operators do shallow copies, which is fine for classes that contain no dynamically allocated variables.
 - Classes with dynamically allocated variables need to have a copy constructor and assignment operator that do a deep copy.
 - Favor using classes in the standard library over doing your own memory management.
+* Move Semantics and Smart Pointers
+** R-value references
+You should almost never return an r-value reference, for the same reason you should almost never return an l-value reference. In most cases, you’ll end up returning a hanging reference when the referenced object goes out of scope at the end of the function.
 * Next
-https://www.learncpp.com/cpp-tutorial/chapter-21-project/
+https://www.learncpp.com/cpp-tutorial/move-constructors-and-move-assignment/

@@ -3608,5 +3608,46 @@ Classes in the standard library that deal with dynamic memory, such as std::stri
 * Move Semantics and Smart Pointers
 ** R-value references
 You should almost never return an r-value reference, for the same reason you should almost never return an l-value reference. In most cases, you’ll end up returning a hanging reference when the referenced object goes out of scope at the end of the function.
+** Move constructors and move assignment
+Move constructors and move assignment should be marked as noexcept. This tells the compiler that these functions will not throw exceptions.
+*** When are the move constructor and move assignment called?
+The move constructor and move assignment are called when those functions have been defined, and the argument for construction or assignment is an rvalue. Most typically, this rvalue will be a literal or temporary value.
+
+The copy constructor and copy assignment are used otherwise (when the argument is an lvalue, or when the argument is an rvalue and the move constructor or move assignment functions aren’t defined).
+*** Implicit move constructor and move assignment operator
+**** The compiler will create an implicit move constructor and move assignment operator if all of the following are true:
+- There are no user-declared copy constructors or copy assignment operators.
+- There are no user-declared move constructors or move assignment operators.
+- There is no user-declared destructor.
+
+**** These functions do a memberwise move, which behaves as follows:
+If member has a move constructor or move assignment (as appropriate), it will be invoked.
+Otherwise, the member will be copied.
+Notably, this means that pointers will be copied, not moved!
+
+**** Warning
+The implicit move constructor and move assignment will copy pointers, not move them. If you want to move a pointer member, you will need to define the move constructor and move assignment yourself.
+
+*** Disabling copying 
+In move-enabled classes, it is sometimes desirable to delete the copy constructor and copy assignment functions to ensure copies aren’t made.
+
+
+*** rule of five
+The rule of five says that if the copy constructor, copy assignment, move constructor, move assignment, or destructor are defined or deleted, then each of those functions should be defined or deleted.
+** std::move
+*** Moved from objects will be in a valid, but possibly indeterminate state
+std::move() gives a hint to the compiler that the programmer doesn’t need the value of an object any more. Only use std::move() on persistent objects whose value you want to move, and do not make any assumptions about the value of the object beyond that point. It is okay to give a moved-from object a new value (e.g. using operator=) after the current value has been moved.
+** std::unique_ptr
+Favor std::array, std::vector, or std::string over a smart pointer managing a fixed array, dynamic array, or C-style string.
+
+Use std::make_unique() instead of creating std::unique_ptr and using new yourself.
+
+In general, you should not return std::unique_ptr by pointer (ever) or reference (unless you have a specific compelling reason to).
+** std::shared_ptr
+Always make a copy of an existing std::shared_ptr if you need more than one std::shared_ptr pointing to the same resource.
+
+std::shared_ptr is designed for the case where you need multiple smart pointers co-managing the same resource. The resource will be deallocated when the last std::shared_ptr managing the resource is destroyed.
+** Circular dependency issues with std::shared_ptr, and std::weak_ptr
+std::shared_ptr can be used when you need multiple smart pointers that can co-own a resource. The resource will be deallocated when the last std::shared_ptr goes out of scope. std::weak_ptr can be used when you want a smart pointer that can see and use a shared resource, but does not participate in the ownership of that resource.
 * Next
 https://www.learncpp.com/cpp-tutorial/move-constructors-and-move-assignment/

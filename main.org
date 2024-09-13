@@ -3650,4 +3650,4 @@ std::shared_ptr is designed for the case where you need multiple smart pointers 
 ** Circular dependency issues with std::shared_ptr, and std::weak_ptr
 std::shared_ptr can be used when you need multiple smart pointers that can co-own a resource. The resource will be deallocated when the last std::shared_ptr goes out of scope. std::weak_ptr can be used when you want a smart pointer that can see and use a shared resource, but does not participate in the ownership of that resource.
 * Next
-https://www.learncpp.com/cpp-tutorial/move-constructors-and-move-assignment/
+https://www.learncpp.com/cpp-tutorial/object-relationships/

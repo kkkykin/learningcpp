@@ -3649,5 +3649,127 @@ Always make a copy of an existing std::shared_ptr if you need more than one std:
 std::shared_ptr is designed for the case where you need multiple smart pointers co-managing the same resource. The resource will be deallocated when the last std::shared_ptr managing the resource is destroyed.
 ** Circular dependency issues with std::shared_ptr, and std::weak_ptr
 std::shared_ptr can be used when you need multiple smart pointers that can co-own a resource. The resource will be deallocated when the last std::shared_ptr goes out of scope. std::weak_ptr can be used when you want a smart pointer that can see and use a shared resource, but does not participate in the ownership of that resource.
+* Object Relationships
+** Aggregation
+Implement the simplest relationship type that meets the needs of your program, not what seems right in real-life.
+*** Summarizing composition and aggregation
+While aggregations can be extremely useful, they are also potentially more dangerous, because aggregations do not handle deallocation of their parts. Deallocations are left to an external party to do. If the external party no longer has a pointer or reference to the abandoned parts, or if it simply forgets to do the cleanup (assuming the class will handle that), then memory will be leaked.
+
+For this reason, compositions should be favored over aggregations.
+
+**** Compositions:
+Typically use normal member variables
+Can use pointer members if the class handles object allocation/deallocation itself
+Responsible for creation/destruction of parts
+
+**** Aggregations:
+Typically use pointer or reference members that point to or reference objects that live outside the scope of the aggregate class
+Not responsible for creating/destroying parts
+** Association
+| Property                               | Composition    | Aggregation    | Association                     |
+|----------------------------------------+----------------+----------------+---------------------------------|
+| Relationship type                      | Whole/part     | Whole/part     | Otherwise unrelated             |
+| Members can belong to multiple classes | No             | Yes            | Yes                             |
+| Members’ existence managed by class    | Yes            | No             | No                              |
+| Directionality                         | Unidirectional | Unidirectional | Unidirectional or bidirectional |
+| Relationship verb                      | Part-of        | Has-a          | Uses-a                          |
+** std::initializer_list
+Adding a list constructor to an existing class that did not have one may break existing programs.
+If you provide list construction, it’s a good idea to provide list assignment as well.
+
+When initializing a container that has a list constructor:
+
+- Use brace initialization when intending to call the list constructor (e.g. because your initializers are element values)
+- Use direct initialization when intending to call a non-list constructor (e.g. because your initializers are not element values).
+** Summary
+| Property\Type                          | Composition    | Aggregation    | Association                     | Dependency          |
+|----------------------------------------+----------------+----------------+---------------------------------+---------------------|
+| Relationship type                      | Whole/part     | Whole/part     | Otherwise unrelated             | Otherwise unrelated |
+| Members can belong to multiple classes | No             | Yes            | Yes                             | Yes                 |
+| Members existence managed by class     | Yes            | No             | No                              | No                  |
+| Directionality                         | Unidirectional | Unidirectional | Unidirectional or bidirectional | Unidirectional      |
+| Relationship verb                      | Part-of        | Has-a          | Uses-a                          | Depends-on          |
+* Inheritance
+** Inheritance and access specifiers
+Favor private members over protected members.
+Use public inheritance unless you have a specific reason to do otherwise.
+| Access specifier in base class | Access specifier when inherited publicly | Access specifier when inherited privately | Access specifier when inherited protectedly |
+|--------------------------------+------------------------------------------+-------------------------------------------+---------------------------------------------|
+| Public                         | Public                                   | Private                                   | Protected                                   |
+| Protected                      | Protected                                | Private                                   | Protected                                   |
+| Private                        | Inaccessible                             | Inaccessible                              | Inaccessible                                |
+** Calling inherited functions and overriding behavior
+*** Overload resolution in derived classes
+#+begin_src cpp :main no
+#include <iostream>
+
+class Base
+{
+public:
+    void print(int)    { std::cout << "Base::print(int)\n"; }
+    void print(double) { std::cout << "Base::print(double)\n"; }
+};
+
+class Derived: public Base
+{
+public:
+    using Base::print; // make all Base::print() functions eligible for overload resolution
+    void print(double) { std::cout << "Derived::print(double)"; }
+};
+
+
+int main()
+{
+    Derived d{};
+    d.print(5); // calls Base::print(int), which is the best matching function visible in Derived
+
+    return 0;
+}
+#+end_src
+** Hiding inherited functionality
+#+begin_src cpp
+#include <iostream>
+
+class Base
+{
+private:
+    int m_value {};
+
+public:
+    Base(int value)
+        : m_value { value }
+    {
+    }
+
+protected:
+    void printValue() const { std::cout << m_value; }
+};
+
+class Derived: public Base
+{
+public:
+    Derived(int value)
+        : Base { value }
+    {
+    }
+
+    // Base::printValue was inherited as protected, so the public has no access
+    // But we're changing it to public via a using declaration
+    using Base::printValue; // note: no parenthesis here
+};
+
+int main()
+{
+    Derived derived { 7 };
+
+    // printValue is public in Derived, so this is okay
+    derived.printValue(); // prints 7
+    return 0;
+}
+#+end_src
+** Hiding functionality
+Given a set of overloaded functions in the base class, there is no way to change the access specifier for a single overload. You can only change them all:
+** Multiple inheritance
+Avoid multiple inheritance unless alternatives lead to more complexity.
 * Next
-https://www.learncpp.com/cpp-tutorial/object-relationships/
+https://www.learncpp.com/cpp-tutorial/chapter-24-summary-and-quiz/

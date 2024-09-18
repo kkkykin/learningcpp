@@ -1,0 +1,22 @@
+UNADDRESSABLE ACCESS
+name=Unknown Error #1
+*!*
+*!*
+*!*
+*!*
+ntdll.dll!RtlUserThreadStart
+
+POSSIBLE LEAK
+name=Unknown Error #2
+drmemorylib.dll!replace_malloc
+*!*
+*!*
+*!*
+*!*
+ucrtbase.dll!_sys_nerr
+ucrtbase.dll!o_free
+ucrtbase.dll!execute_onexit_table
+ucrtbase.dll!exit
+ucrtbase.dll!exit
+ucrtbase.dll!exit
+*!*

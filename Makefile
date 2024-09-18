@@ -4,8 +4,9 @@ ifeq ($(OS),Windows_NT)     # is Windows_NT on XP, 2000, 7, Vista, 10...
 	detected_OS := Windows
 	suffix := .exe
 	clean_CMD := fd -g *$(suffix) -X rm
-	debug_TOOL := drmemory -brief -batch --
-	debug_args = $(debug_args) -m32 -fno-inline -fno-omit-frame-pointer -static-libgcc -static-libstdc++
+	mkfile_dir := $(dir $(abspath $(MAKEFILE_LIST)))
+	debug_TOOL := drmemory -brief -batch -suppress $(mkfile_dir)suppress.txt --
+	debug_args = -gdwarf-2 -fno-inline -fno-omit-frame-pointer -static-libgcc -static-libstdc++
 else
 	detected_OS := $(shell uname)  # same as "uname -s"
 	clean_CMD := find . -name .git -prune , \( -type f -executable -o -name .gdb_history \) -exec rm {} \;

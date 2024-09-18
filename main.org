@@ -3771,5 +3771,374 @@ int main()
 Given a set of overloaded functions in the base class, there is no way to change the access specifier for a single overload. You can only change them all:
 ** Multiple inheritance
 Avoid multiple inheritance unless alternatives lead to more complexity.
+* Virtual Functions
+** Virtual functions and polymorphism
+Virtual function resolution only works when a member function is called through a pointer or reference to a class type object.
+If a function is virtual, all matching overrides in derived classes are implicitly virtual.
+Never call virtual functions from constructors or destructors.
+** The override and final specifiers, and covariant return types
+*** The override specifier
+Use the virtual keyword on virtual functions in a base class.
+
+Use the override specifier (but not the virtual keyword) on override functions in derived classes. This includes virtual destructors.
+*** The final specifier
+#+begin_src cpp
+#include <string_view>
+
+class A
+{
+public:
+	virtual std::string_view getName() const { return "A"; }
+};
+
+class B final : public A // note use of final specifier here
+{
+public:
+	// note use of final specifier on following line -- that makes this function not able to be overridden in derived classes
+	std::string_view getName() const override final { return "B"; } // okay, overrides A::getName()
+};
+
+class C : public B // compile error: cannot inherit from final class
+{
+public:
+	std::string_view getName() const override { return "C"; } // compile error: overrides B::getName(), which is final
+};
+#+end_src
+** Virtual destructors, virtual assignment, and overriding virtualizatio
+If you intend your class to be inherited from, make sure your destructor is virtual.
+If you do not intend your class to be inherited from, mark your class as final. This will prevent other classes from inheriting from it in the first place, without imposing any other use restrictions on the class itself.
+** Pure virtual functions, abstract base classes, and interface classes
+Any class with pure virtual functions should also have a virtual destructor.
+#+begin_src cpp
+#include <iostream>
+#include <string>
+#include <string_view>
+
+class Animal // This Animal is an abstract base class
+{
+protected:
+    std::string m_name {};
+
+public:
+    Animal(std::string_view name)
+        : m_name(name)
+    {
+    }
+
+    const std::string& getName() const { return m_name; }
+    virtual std::string_view speak() const = 0; // note that speak is a pure virtual function
+
+    virtual ~Animal() = default;
+};
+
+std::string_view Animal::speak() const
+{
+    return "buzz"; // some default implementation
+}
+
+class Dragonfly: public Animal
+{
+
+public:
+    Dragonfly(std::string_view name)
+        : Animal{name}
+    {
+    }
+
+    std::string_view speak() const override// this class is no longer abstract because we defined this function
+    {
+        return Animal::speak(); // use Animal's default implementation
+    }
+};
+
+int main()
+{
+    Dragonfly dfly{"Sally"};
+    std::cout << dfly.getName() << " says " << dfly.speak() << '\n';
+
+    return 0;
+}
+#+end_src
+** Virtual base classes
+if a class inherits one or more classes that have virtual parents, the most derived class is responsible for constructing the virtual base class.
+** Object slicing
+Although C++ supports assigning derived objects to base objects via object slicing, in general, this is likely to cause nothing but headaches, and you should generally try to avoid slicing. Make sure your function parameters are references (or pointers) and try to avoid any kind of pass-by-value when it comes to derived classes.
+** Dynamic casting
+C++ will implicitly let you convert a Derived pointer into a Base pointer (in fact, getObject() does just that). This process is sometimes called upcasting.
+C++ provides a casting operator named dynamic_cast that can be used for just this purpose. Although dynamic casts have a few different capabilities, by far the most common use for dynamic casting is for converting base-class pointers into derived-class pointers. This process is called downcasting.
+
+Always ensure your dynamic casts actually succeeded by checking for a null pointer result.
+*** dynamic_cast vs static_cast
+Use static_cast unless you’re downcasting, in which case dynamic_cast is usually a better choice. However, you should also consider avoiding casting altogether and just use virtual functions.
+
+*** Downcasting vs virtual functions
+In general, using a virtual function should be preferred over downcasting. However, there are times when downcasting is the better choice:
+- When you can not modify the base class to add a virtual function (e.g. because the base class is part of the standard library)
+- When you need access to something that is derived-class specific (e.g. an access function that only exists in the derived class)
+- When adding a virtual function to your base class doesn’t make sense (e.g. there is no appropriate value for the base class to return). Using a pure virtual function may be an option here if you don’t need to instantiate the base class.
+
+*** A warning about dynamic_cast and RTTI
+Run-time type information (RTTI) is a feature of C++ that exposes information about an object’s data type at runtime. This capability is leveraged by dynamic_cast. Because RTTI has a pretty significant space performance cost, some compilers allow you to turn RTTI off as an optimization. Needless to say, if you do this, dynamic_cast won’t function correctly.
+
+* Templates and Classes
+** Function template specialization
+Full specializations are not implicitly inline (partial specializations are implicitly inline). If you put a full specialization in a header file, it should be marked as inline so that it does not cause ODR violations when included into multiple translation units.
+#+begin_src cpp
+#include <iostream>
+
+// Here's our primary template (must come first)
+template <typename T>
+void print(const T& t)
+{
+    std::cout << t << '\n';
+}
+
+// A full specialization of primary template print<T> for type double
+// Full specializations are not implicitly inline, so make this inline if put in header file
+template<>                          // template parameter declaration containing no template parameters
+void print<double>(const double& d) // specialized for type double
+{
+    std::cout << std::scientific << d << '\n';
+}
+
+int main()
+{
+    print(5);
+    print(6.7);
+
+    return 0;
+}
+#+end_src
+** Class template specialization
+We can change entire class definition or one member function!
+#+begin_src cpp
+#include <iostream>
+
+template <typename T>
+class Storage
+{
+private:
+    T m_value {};
+public:
+    Storage(T value)
+      : m_value { value }
+    {
+    }
+
+    void print()
+    {
+        std::cout << m_value << '\n';
+    }
+};
+
+// This is a specialized member function definition
+// Explicit function specializations are not implicitly inline, so make this inline if put in header file
+template<>
+void Storage<double>::print()
+{
+    std::cout << std::scientific << m_value << '\n';
+}
+
+int main()
+{
+    // Define some storage units
+    Storage i { 5 };
+    Storage d { 6.7 }; // will cause Storage<double> to be implicitly instantiated
+
+    // Print out some values
+    i.print(); // calls Storage<int>::print (instantiated from Storage<T>)
+    d.print(); // calls Storage<double>::print (called from explicit specialization of Storage<double>::print())
+}
+#+end_src
+** Partial template specialization
+#+begin_src cpp
+#include <algorithm>
+#include <iostream>
+#include <string_view>
+
+template <typename T, int size> // size is the expression parameter
+class StaticArray
+{
+private:
+	// The expression parameter controls the size of the array
+	T m_array[size]{};
+
+public:
+	T* getArray() { return m_array; }
+
+	const T& operator[](int index) const { return m_array[index]; }
+	T& operator[](int index) { return m_array[index]; }
+};
+
+template <typename T, int size>
+void print(const StaticArray<T, size>& array)
+{
+	for (int count{ 0 }; count < size; ++count)
+		std::cout << array[count] << ' ';
+}
+
+// overload of print() function for partially specialized StaticArray<char, size>
+template <int size>
+void print(const StaticArray<char, size>& array)
+{
+	for (int count{ 0 }; count < size; ++count)
+		std::cout << array[count];
+}
+
+int main()
+{
+	// Declare an char array of size 14
+	StaticArray<char, 14> char14{};
+
+	// Copy some data into it
+	constexpr std::string_view hello14{ "Hello, world!" };
+	std::copy_n(hello14.begin(), hello14.size(), char14.getArray());
+
+	// Print the array
+	print(char14);
+
+	std::cout << ' ';
+
+	// Now declare an char array of size 12
+	StaticArray<char, 12> char12{};
+
+	// Copy some data into it
+	constexpr std::string_view hello12{ "Hello, mom!" };
+	std::copy_n(hello12.begin(), hello12.size(), char12.getArray());
+
+	// Print the array
+	print(char12);
+
+	return 0;
+}
+#+end_src
+*** Partial template specialization for member functions
+Partially specialize a function, which is disallowed, Partially specialize the entire class instead. Using a common base class significantly less duplicated code.
+#+begin_src cpp :main no
+#include <iostream>
+
+template <typename T, int size>
+class StaticArray_Base
+{
+protected:
+	T m_array[size]{};
+
+public:
+	T* getArray() { return m_array; }
+
+	const T& operator[](int index) const { return m_array[index]; }
+	T& operator[](int index) { return m_array[index]; }
+
+	void print() const
+	{
+		for (int i{ 0 }; i < size; ++i)
+			std::cout << m_array[i] << ' ';
+		std::cout << '\n';
+	}
+
+	// Don't forget a virtual destructor if you're going to use virtual function resolution
+};
+
+template <typename T, int size>
+class StaticArray: public StaticArray_Base<T, size>
+{
+};
+
+template <int size>
+class StaticArray<double, size>: public StaticArray_Base<double, size>
+{
+public:
+
+	void print() const
+	{
+		for (int i{ 0 }; i < size; ++i)
+			std::cout << std::scientific << this->m_array[i] << ' ';
+// note: The this-> prefix in the above line is needed.
+// See https://stackoverflow.com/a/6592617 or https://isocpp.org/wiki/faq/templates#nondependent-name-lookup-members for more info on why.
+		std::cout << '\n';
+	}
+};
+
+int main()
+{
+	// declare an integer array with room for 6 integers
+	StaticArray<int, 6> intArray{};
+
+	// Fill it up in order, then print it
+	for (int count{ 0 }; count < 6; ++count)
+		intArray[count] = count;
+
+	intArray.print();
+
+	// declare a double buffer with room for 4 doubles
+	StaticArray<double, 4> doubleArray{};
+
+	for (int count{ 0 }; count < 4; ++count)
+		doubleArray[count] = (4.0 + 0.1 * count);
+
+	doubleArray.print();
+
+	return 0;
+}
+#+end_src
+** Partial template specialization for pointers
+#+begin_src cpp :main no
+#include <iostream>
+#include <type_traits> // for std::is_pointer_v and std::is_null_pointer_v
+#include <memory>
+
+template <typename T>
+class Storage
+{
+    // Make sure T isn't a pointer or a std::nullptr_t
+    static_assert(!std::is_pointer_v<T> && !std::is_null_pointer_v<T>, "Storage<T*> and Storage<nullptr> disallowed");
+
+private:
+    T m_value {};
+
+public:
+    Storage(T value)
+      : m_value { value }
+    {
+    }
+
+    void print()
+    {
+        std::cout << m_value << '\n';
+    }
+};
+
+template <typename T>
+class Storage<T*>
+{
+private:
+    std::unique_ptr<T> m_value {}; // use std::unique_ptr to automatically deallocate when Storage is destroyed
+
+public:
+    Storage(T* value)
+      : m_value { std::make_unique<T>(value ? *value : 0) } // or throw exception when !value
+    {
+    }
+
+    void print()
+    {
+        if (m_value)
+            std::cout << *m_value << '\n';
+    }
+};
+
+int main()
+{
+    double d { 1.2 };
+
+    Storage s1 { d }; // ok
+    s1.print();
+
+    Storage s2 { &d }; // ok, copies d on heap
+    s2.print();
+
+    return 0;
+}
+#+end_src
 * Next
-https://www.learncpp.com/cpp-tutorial/chapter-24-summary-and-quiz/
+https://www.learncpp.com/cpp-tutorial/chapter-26-summary-and-quiz/

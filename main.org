@@ -4140,5 +4140,1157 @@ int main()
     return 0;
 }
 #+end_src
+
+* Exceptions
+** Uncaught exceptions and catch-all handlers
+The call stack may or may not be unwound if an exception is unhandled.
+
+If the stack is not unwound, local variables will not be destroyed, which may cause problems if those variables have non-trivial destructors.
+** Catch-all handlers
+#+begin_src cpp :main no
+#include <iostream>
+
+int main()
+{
+	try
+	{
+		throw 5; // throw an int exception
+	}
+	catch (double x)
+	{
+		std::cout << "We caught an exception of type double: " << x << '\n';
+	}
+	catch (...) // catch-all handler
+	{
+		std::cout << "We caught an exception of an undetermined type\n";
+	}
+}
+#+end_src
+** Using the catch-all handler to wrap main()
+If your program uses exceptions, consider using a catch-all handler in main, to help ensure orderly behavior if an unhandled exception occurs.
+
+If an exception is caught by the catch-all handler, you should assume the program is now in some indeterminate state, perform cleanup immediately, and then terminate.
+#+begin_src cpp :main no
+#include <iostream>
+
+struct GameSession
+{
+    // Game session data here
+};
+
+void runGame(GameSession&)
+{
+    throw 1;
+}
+
+void saveGame(GameSession&)
+{
+    // Save user's game here
+}
+
+int main()
+{
+    GameSession session{};
+
+    try
+    {
+        runGame(session);
+    }
+    catch(...)
+    {
+        std::cerr << "Abnormal termination\n";
+    }
+
+    saveGame(session); // save the user's game (even if catch-all handler was hit)
+
+    return 0;
+}
+#+end_src
+** Debugging unhandled exceptions
+In debug builds, it can be useful to disable the catch-all handler.
+#+begin_src cpp :main no
+#include <iostream>
+
+struct GameSession
+{
+    // Game session data here
+};
+
+void runGame(GameSession&)
+{
+    throw 1;
+}
+
+void saveGame(GameSession&)
+{
+    // Save user's game here
+}
+
+class DummyException // a dummy class that can't be instantiated
+{
+    DummyException() = delete;
+};
+
+int main()
+{
+    GameSession session {};
+
+    try
+    {
+        runGame(session);
+    }
+#ifndef NDEBUG // if we're in release node
+    catch(...) // compile in the catch-all handler
+    {
+        std::cerr << "Abnormal termination\n";
+    }
+#else // in debug mode, compile in a catch that will never be hit (for syntactic reasons)
+    catch(DummyException)
+    {
+    }
+#endif
+
+    saveGame(session); // save the user's game (even if catch-all handler was hit)
+
+    return 0;
+}
+#+end_src
+** Exceptions, classes, and inheritance
+*** Exception classes
+Exceptions of a fundamental type can be caught by value since they are cheap to copy.
+Exceptions of a class type should be caught by (const) reference to prevent expensive copying and slicing.
+*** Exceptions and inheritance
+Handlers for derived exception classes should be listed before those for base classes.
+*** std::exception
+#+begin_src cpp :main no
+#include <cstddef> // for std::size_t
+#include <exception> // for std::exception
+#include <iostream>
+#include <limits>
+#include <string> // for this example
+
+int main()
+{
+    try
+    {
+        // Your code using standard library goes here
+        // We'll trigger one of these exceptions intentionally for the sake of the example
+        std::string s;
+        s.resize(std::numeric_limits<std::size_t>::max()); // will trigger a std::length_error or allocation exception
+    }
+    // This handler will catch std::exception and all the derived exceptions too
+    catch (const std::exception& exception)
+    {
+        std::cerr << "Standard exception: " << exception.what() << '\n';
+    }
+
+    return 0;
+}
+#+end_src
+*** Using the standard exceptions directly
+#+begin_src cpp :main no
+#include <exception> // for std::exception
+#include <iostream>
+#include <stdexcept> // for std::runtime_error
+
+int main()
+{
+	try
+	{
+		throw std::runtime_error("Bad things happened");
+	}
+	// This handler will catch std::exception and all the derived exceptions too
+	catch (const std::exception& exception)
+	{
+		std::cerr << "Standard exception: " << exception.what() << '\n';
+	}
+
+	return 0;
+}
+#+end_src
+*** Deriving your own classes from std::exception or std::runtime_error
+#+begin_src cpp :main no
+#include <exception> // for std::exception
+#include <iostream>
+#include <string>
+#include <string_view>
+
+class ArrayException : public std::exception
+{
+private:
+	std::string m_error{}; // handle our own string
+
+public:
+	ArrayException(std::string_view error)
+		: m_error{error}
+	{
+	}
+
+	// std::exception::what() returns a const char*, so we must as well
+	const char* what() const noexcept override { return m_error.c_str(); }
+};
+
+class IntArray
+{
+private:
+	int m_data[3] {}; // assume array is length 3 for simplicity
+
+public:
+	IntArray() {}
+
+	int getLength() const { return 3; }
+
+	int& operator[](const int index)
+	{
+		if (index < 0 || index >= getLength())
+			throw ArrayException("Invalid index");
+
+		return m_data[index];
+	}
+
+};
+
+int main()
+{
+	IntArray array;
+
+	try
+	{
+		int value{ array[5] };
+	}
+	catch (const ArrayException& exception) // derived catch blocks go first
+	{
+		std::cerr << "An array exception occurred (" << exception.what() << ")\n";
+	}
+	catch (const std::exception& exception)
+	{
+		std::cerr << "Some other std::exception occurred (" << exception.what() << ")\n";
+	}
+}
+#+end_src
+*** The lifetime of exceptions
+When an exception is thrown, the compiler makes a copy of the exception object to some piece of unspecified memory (outside of the call stack) reserved for handling exceptions. That way, the exception object is persisted regardless of whether or how many times the stack is unwound. The exception is guaranteed to exist until the exception has been handled.
+
+Exception objects need to be copyable.
+** Rethrowing exceptions
+When rethrowing the same exception, use the throw keyword by itself.
+#+begin_src cpp :main no
+#include <iostream>
+class Base
+{
+public:
+    Base() {}
+    virtual void print() { std::cout << "Base"; }
+};
+
+class Derived: public Base
+{
+public:
+    Derived() {}
+    void print() override { std::cout << "Derived"; }
+};
+
+int main()
+{
+    try
+    {
+        try
+        {
+            throw Derived{};
+        }
+        catch (Base& b)
+        {
+            std::cout << "Caught Base b, which is actually a ";
+            b.print();
+            std::cout << '\n';
+            throw; // note: We're now rethrowing the object here
+        }
+    }
+    catch (Base& b)
+    {
+        std::cout << "Caught Base b, which is actually a ";
+        b.print();
+        std::cout << '\n';
+    }
+
+    return 0;
+}
+#+end_src
+** Function try blocks
+Use function try blocks when you need a constructor to handle an exception thrown in the member initializer list.
+#+begin_src cpp :main no
+#include <iostream>
+
+class A
+{
+private:
+	int m_x;
+public:
+	A(int x) : m_x{x}
+	{
+		if (x <= 0)
+			throw 1; // Exception thrown here
+	}
+};
+
+class B : public A
+{
+public:
+	B(int x) try : A{x} // note addition of try keyword here
+	{
+	}
+	catch (...) // note this is at same level of indentation as the function itself
+	{
+                // Exceptions from member initializer list or
+                // from constructor body are caught here
+
+                std::cerr << "Exception caught\n";
+
+                throw; // rethrow the existing exception
+	}
+};
+
+int main()
+{
+	try
+	{
+		B b{0};
+	}
+	catch (int)
+	{
+		std::cout << "Oops\n";
+	}
+}
+#+end_src
+*** Limitations on function catch blocks 
+Avoid letting control reach the end of a function-level catch block. Instead, explicitly throw, rethrow, or return.
+| Function type                | Can resolve exceptions via return statement | Behavior at end of catch block |
+|------------------------------+---------------------------------------------+--------------------------------|
+| Constructor                  | No, must throw or rethrow                   | Implicit rethrow               |
+| Destructor                   | Yes                                         | Implicit rethrow               |
+| Non-value returning function | Yes                                         | Resolve exception              |
+| Value-returning function     | Yes                                         | Undefined behavior             |
+|                              |                                             |                                |
+*** Function try blocks can catch both base and the current class exceptions
+#+begin_src cpp :main no
+#include <iostream>
+
+class A
+{
+private:
+	int m_x;
+public:
+	A(int x) : m_x{x}
+	{
+	}
+};
+
+class B : public A
+{
+public:
+	B(int x) try : A{x} // note addition of try keyword here
+	{
+		if (x <= 0) // moved this from A to B
+			throw 1; // and this too
+	}
+	catch (...)
+	{
+                std::cerr << "Exception caught\n";
+
+                // If an exception isn't explicitly thrown here,
+                // the current exception will be implicitly rethrown
+	}
+};
+
+int main()
+{
+	try
+	{
+		B b{0};
+	}
+	catch (int)
+	{
+		std::cout << "Oops\n";
+	}
+}
+#+end_src
+**** Don’t use function try to clean up resources
+Function try is useful primarily for either logging failures before passing the exception up the stack, or for changing the type of exception thrown.
+** Exception dangers and downsides
+*** Cleaning up resources after try-catch
+#+begin_src cpp
+#include <iostream>
+
+try
+{
+    openFile(filename);
+    writeFile(filename, data);
+}
+catch (const FileException& exception)
+{
+    std::cerr << "Failed to write to file: " << exception.what() << '\n';
+}
+
+// Make sure file is closed
+closeFile(filename);
+#+end_src
+*** Exceptions and destructors
+Destructors should not throw exceptions.
+*** Performance concerns
+Exceptions do come with a small performance price to pay. They increase the size of your executable, and they may also cause it to run slower due to the additional checking that has to be performed. However, the main performance penalty for exceptions happens when an exception is actually thrown. In this case, the stack must be unwound and an appropriate exception handler found, which is a relatively expensive operation.
+
+*** when should I use exceptions?
+Exception handling is best used when all of the following are true:
+
+- The error being handled is likely to occur only infrequently.
+- The error is serious and execution could not continue otherwise.
+- The error cannot be handled at the place where it occurs.
+- There isn’t a good alternative way to return an error code back to the caller.
+
+** Exception specifications and noexcept
+*** The noexcept specifier
+In C++, all functions are classified as either non-throwing or potentially throwing. A non-throwing function is one that promises not to throw exceptions that are visible to the caller. A potentially throwing function may throw exceptions that are visible to the caller.
+
+To define a function as non-throwing, we can use the noexcept specifier.
+
+Note that noexcept doesn’t actually prevent the function from throwing exceptions or calling other functions that are potentially throwing. This is allowed so long as the noexcept function catches and handles those exceptions internally, and those exceptions do not exit the noexcept function.
+
+If an unhandled exception would exit a noexcept function, std::terminate will be called (even if there is an exception handler that would otherwise handle such an exception somewhere up the stack). And if std::terminate is called from inside a noexcept function, stack unwinding may or may not occur (depending on implementation and optimizations), which means your objects may or may not be destructed properly prior to termination.
+*** The noexcept specifier with a Boolean parameter
+The noexcept specifier has an optional Boolean parameter. noexcept(true) is equivalent to noexcept, meaning the function is non-throwing. noexcept(false) means the function is potentially throwing. These parameters are typically only used in template functions, so that a template function can be dynamically created as non-throwing or potentially throwing based on some parameterized value.
+*** Which functions are non-throwing and potentially-throwing
+**** Functions that are implicitly non-throwing:
+
+- Destructors
+**** Functions that are non-throwing by default for implicitly-declared or defaulted functions:
+
+- Constructors: default, copy, move
+- Assignments: copy, move
+- Comparison operators (as of C++20)
+
+However, if any of these functions call (explicitly or implicitly) another function which is potentially throwing, then the listed function will be treated as potentially throwing as well. For example, if a class has a data member with a potentially throwing constructor, then the class’s constructors will be treated as potentially throwing as well. As another example, if a copy assignment operator calls a potentially throwing assignment operator, then the copy assignment will be potentially throwing as well.
+
+**** Functions that are potentially throwing (if not implicitly-declared or defaulted):
+
+- Normal functions
+- User-defined constructors
+- User-defined operators
+
+*** The noexcept operator
+#+begin_src cpp
+void foo() {throw -1;}
+void boo() {};
+void goo() noexcept {};
+struct S{};
+
+constexpr bool b1{ noexcept(5 + 3) }; // true; ints are non-throwing
+constexpr bool b2{ noexcept(foo()) }; // false; foo() throws an exception
+constexpr bool b3{ noexcept(boo()) }; // false; boo() is implicitly noexcept(false)
+constexpr bool b4{ noexcept(goo()) }; // true; goo() is explicitly noexcept(true)
+constexpr bool b5{ noexcept(S{}) };   // true; a struct's default constructor is noexcept by default
+#+end_src
+
+*** Exception safety guarantees
+**** An exception safety guarantee is a contractual guideline about how functions or classes will behave in the event an exception occurs. There are four levels of exception safety guarantees:
+
+- No guarantee -- There are no guarantees about what will happen if an exception is thrown (e.g. a class may be left in an unusable state)
+- Basic guarantee -- If an exception is thrown, no memory will be leaked and the object is still usable, but the program may be left in a modified state.
+- Strong guarantee -- If an exception is thrown, no memory will be leaked and the program state will not be changed. This means the function must either completely succeed or have no side effects if it fails. This is easy if the failure happens before anything is modified in the first place, but can also be achieved by rolling back any changes so the program is returned to the pre-failure state.
+- No throw / No fail guarantee -- The function will always succeed (no-fail) or fail without throwing an exception that is exposed to the caller (no-throw). Exceptions may be thrown internally if not exposed. The noexcept specifier maps to this level of exception safety guarantee.
+**** Let’s look at the no-throw/no-fail guarantees in more detail:
+
+The no-throw guarantee: if a function fails, then it won’t throw an exception. Instead, it will return an error code or ignore the problem. No-throw guarantees are required during stack unwinding when an exception is already being handled; for example, all destructors should have a no-throw guarantee (as should any functions those destructors call). Examples of code that should be no-throw:
+
+- destructors and memory deallocation/cleanup functions
+- functions that higher-level no-throw functions need to call
+**** The no-fail guarantee: a function will always succeed in what it tries to do (and thus never has a need to throw an exception, thus, no-fail is a slightly stronger form of no-throw). Examples of code that should be no-fail:
+
+- move constructors and move assignment
+- swap functions
+- clear/erase/reset functions on containers
+- operations on std::unique_ptr
+- functions that higher-level no-fail functions need to call
+*** When to use noexcept
+Always make move constructors, move assignment, and swap functions noexcept.
+
+Make copy constructors and copy assignment operators noexcept when you can.
+
+Use noexcept on other functions to express a no-fail or no-throw guarantee.
+
+If you are uncertain whether a function should have a no-fail/no-throw guarantee, err on the side of caution and do not mark it with noexcept. Reversing a decision to use noexcept violates an interface commitment to the user about the behavior of the function, and may break existing code. Making guarantees stronger by later adding noexcept to a function that was not originally noexcept is considered safe.
+** std::move_if_noexcept
+std::move_if_noexcept will return a movable r-value if the object has a noexcept move constructor, otherwise it will return a copyable l-value. We can use the noexcept specifier in conjunction with std::move_if_noexcept to use move semantics only when a strong exception guarantee exists (and use copy semantics otherwise).
+* Input and Output (I/O)
+** Input and output (I/O) streams
+*** Input/output in C++
+The istream class is the primary class used when dealing with input streams. With input streams, the extraction operator (>>) is used to remove values from the stream. This makes sense: when the user presses a key on the keyboard, the key code is placed in an input stream. Your program then extracts the value from the stream so it can be used.
+
+The ostream class is the primary class used when dealing with output streams. With output streams, the insertion operator (<<) is used to put values in the stream. This also makes sense: you insert your values into the stream, and the data consumer (e.g. monitor) uses them.
+
+The iostream class can handle both input and output, allowing bidirectional I/O.
+
+*** Standard streams in C++
+A standard stream is a pre-connected stream provided to a computer program by its environment. C++ comes with four predefined standard stream objects that have already been set up for your use. The first three, you have seen before:
+
+1. cin -- an istream object tied to the standard input (typically the keyboard)
+2. cout -- an ostream object tied to the standard output (typically the monitor)
+3. cerr -- an ostream object tied to the standard error (typically the monitor), providing unbuffered output
+4. clog -- an ostream object tied to the standard error (typically the monitor), providing buffered output
+
+Unbuffered output is typically handled immediately, whereas buffered output is typically stored and written out as a block. Because clog isn’t used very often, it is often omitted from the list of standard streams.
+
+** Input with istream
+*** The extraction operator
+#+begin_src cpp
+#include <iomanip>
+char buf[10]{};
+std::cin >> std::setw(10) >> buf;
+#+end_src
+
+This program will now only read the first 9 characters out of the stream (leaving room for a terminator). Any remaining characters will be left in the stream until the next extraction.
+*** Extraction and whitespace
+#+begin_src cpp :main no
+int main()
+{
+    char ch{};
+    while (std::cin.get(ch))
+        std::cout << ch;
+
+    return 0;
+}
+#+end_src
+
+std::get() also has a string version that takes a maximum number of characters to read:
+#+begin_src cpp
+int main()
+{
+    char strBuf[11]{};
+    std::cin.get(strBuf, 11);
+    std::cout << strBuf << '\n';
+
+    return 0;
+}
+#+end_src
+
+getline() that works similarly to get(), but will extract (and discard) the delimiter.
+#+begin_src cpp
+int main()
+{
+    char strBuf[11]{};
+    // Read up to 10 characters
+    std::cin.getline(strBuf, 11);
+    std::cout << strBuf << '\n';
+
+    // Read up to 10 more characters
+    std::cin.getline(strBuf, 11);
+    std::cout << strBuf << '\n';
+    return 0;
+}
+#+end_src
+
+If you need to know how many character were extracted by the last call of getline(), use gcount():
+#+begin_src cpp
+int main()
+{
+    char strBuf[100]{};
+    std::cin.getline(strBuf, 100);
+    std::cout << strBuf << '\n';
+    std::cout << std::cin.gcount() << " characters were read" << '\n';
+
+    return 0;
+}
+#+end_src
+*** A few more useful istream functions
+ignore() discards the first character in the stream.
+ignore(int nCount) discards the first nCount characters.
+peek() allows you to read a character from the stream without removing it from the stream.
+unget() returns the last character read back into the stream so it can be read again by the next call.
+putback(char ch) allows you to put a character of your choice back into the stream to be read by the next call.
+** Output with ostream and ios
+:PROPERTIES:
+:header-args:cpp: :results output replace :includes <iostream>
+:END:
+*** Formatting
+There are two ways to change the formatting options: flags, and manipulators. You can think of flags as boolean variables that can be turned on and off. Manipulators are objects placed in a stream that affect the way things are input and output.
+
+In general, using manipulators is much easier than setting and unsetting flags. Many options are available via both flags and manipulators (such as changing the base), however, other options are only available via flags or via manipulators, so it’s important to know how to use both.
+
+**** setf
+To switch a flag on, use the setf() function, with the appropriate flag as a parameter. For example, by default, C++ does not print a + sign in front of positive numbers. However, by using the std::ios::showpos flag, we can change this behavior:
+
+#+begin_src cpp :results replace
+std::cout.setf(std::ios::showpos); // turn on the std::ios::showpos flag
+std::cout << 27 << '\n';
+#+end_src
+
+#+RESULTS:
+: +27
+
+It is possible to turn on multiple ios flags at once using the Bitwise OR (|) operator:
+#+begin_src cpp
+std::cout.setf(std::ios::showpos | std::ios::uppercase); // turn on the std::ios::showpos and std::ios::uppercase flag
+std::cout << 1234567.89f << '\n';
+#+end_src
+
+#+RESULTS:
+: +1.23457E+06
+
+To turn a flag off, use the unsetf() function:
+#+begin_src cpp
+std::cout.setf(std::ios::showpos); // turn on the std::ios::showpos flag
+std::cout << 27 << '\n';
+std::cout.unsetf(std::ios::showpos); // turn off the std::ios::showpos flag
+std::cout << 28 << '\n';
+#+end_src
+
+#+RESULTS:
+: +27
+: 28
+
+setf() only turns flags on -- it isn’t smart enough to turn mutually exclusive flags off. Consequently, when we turned std::hex on, std::ios::dec was still on, and std::ios::dec apparently takes precedence.
+#+begin_src cpp
+std::cout.unsetf(std::ios::dec); // turn off decimal output
+std::cout.setf(std::ios::hex); // turn on hexadecimal output
+std::cout << 27 << '\n';
+#+end_src
+
+#+RESULTS:
+: 1b
+
+The second way is to use a different form of setf() that takes two parameters: the first parameter is the flag to set, and the second is the formatting group it belongs to. When using this form of setf(), all of the flags belonging to the group are turned off, and only the flag passed in is turned on. For example:
+#+begin_src cpp
+// Turn on std::ios::hex as the only std::ios::basefield flag
+std::cout.setf(std::ios::hex, std::ios::basefield);
+std::cout << 27 << '\n';
+#+end_src
+
+#+RESULTS:
+: 1b
+
+**** manipulators
+#+begin_src cpp
+std::cout << std::hex << 27 << '\n'; // print 27 in hex
+std::cout << 28 << '\n'; // we're still in hex
+std::cout << std::dec << 29 << '\n'; // back to decimal
+#+end_src
+
+#+RESULTS:
+: 1b
+: 1c
+: 29
+*** Useful formatters
+Check this latter.
+** Stream classes for strings
+There are six stream classes for strings: istringstream (derived from istream), ostringstream (derived from ostream), and stringstream (derived from iostream) are used for reading and writing normal characters width strings. wistringstream, wostringstream, and wstringstream are used for reading and writing wide character strings. To use the stringstreams, you need to #include the sstream header.
+
+*** stringstream io:
+#+begin_src cpp
+std::stringstream os {};
+os << "en garde!\n"; // insert "en garde!" into the stringstream
+os.str("en garde!"); // set the stringstream buffer to "en garde!"
+
+std::cout << os.str();          // Use the str() function to retrieve the results of the buffer:
+
+std::string strValue {};
+os >> strValue;
+
+std::string strValue2 {};
+os >> strValue2;
+
+// print the numbers separated by a dash
+std::cout << strValue << " - " << strValue2 << '\n';
+#+end_src
+
+*** Conversion between strings and numbers
+string to number
+#+begin_src cpp :includes '(<iostream> <string>)
+std::stringstream os {};
+
+constexpr int nValue { 12345 };
+constexpr double dValue { 67.89 };
+os << nValue << ' ' << dValue;
+
+std::string strValue1, strValue2;
+os >> strValue1 >> strValue2;
+
+std::cout << strValue1 << ' ' << strValue2 << '\n';
+#+end_src
+
+convert a numerical string to a number
+#+begin_src cpp
+std::stringstream os {};
+os << "12345 67.89"; // insert a string of numbers into the stream
+int nValue {};
+double dValue {};
+
+os >> nValue >> dValue;
+
+std::cout << nValue << ' ' << dValue << '\n';
+#+end_src
+
+*** Clearing a stringstream for reuse
+clear() resets any error flags that may have been set and returns the stream back to the ok state. We will talk more about the stream state and error flags in the next lesson.
+#+begin_src cpp
+std::stringstream os {};
+os << "Hello ";
+
+os.str(""); // erase the buffer
+os.str(std::string{}); // erase the buffer
+os.clear(); // reset error flags, recommend
+
+os << "World!";
+std::cout << os.str();
+#+end_src
+
+** Stream states and input validation
+*** Stream states
+The ios_base class contains several state flags that are used to signal various conditions that may occur when using streams:
+| Flag    | Meaning                                                                                              |
+|---------+------------------------------------------------------------------------------------------------------|
+| goodbit | Everything is okay                                                                                   |
+| badbit  | Some kind of fatal error occurred (e.g. the program tried to read past the end of a file)            |
+| eofbit  | The stream has reached the end of a file                                                             |
+| failbit | A non-fatal error occurred (e.g. the user entered letters when the program was expecting an integer) |
+
+ios also provides a number of member functions in order to conveniently access these states:
+| Member function | Meaning                                                                |
+|-----------------+------------------------------------------------------------------------|
+| good()          | Returns true if the goodbit is set (the stream is ok)                  |
+| bad()           | Returns true if the badbit is set (a fatal error occurred)             |
+| eof()           | Returns true if the eofbit is set (the stream is at the end of a file) |
+| fail()          | Returns true if the failbit is set (a non-fatal error occurred)        |
+| clear()         | Clears all flags and restores the stream to the goodbit state          |
+| clear(state)    | Clears all flags and sets the state flag passed in                     |
+| rdstate()       | Returns the currently set flags                                        |
+| setstate(state) | Sets the state flag passed in                                          |
+
+*** Input validation
+To help us out, C++ provides a number of useful functions that we can use to determine whether specific characters are numbers or letters. The following functions live in the cctype header:
+| Function           | Meaning                                                                         |
+|--------------------+---------------------------------------------------------------------------------|
+| std::isalnum(int)  | Returns non-zero if the parameter is a letter or a digit                        |
+| std::isalpha(int)  | Returns non-zero if the parameter is a letter                                   |
+| std::iscntrl(int)  | Returns non-zero if the parameter is a control character                        |
+| std::isdigit(int)  | Returns non-zero if the parameter is a digit                                    |
+| std::isgraph(int)  | Returns non-zero if the parameter is printable character that is not whitespace |
+| std::isprint(int)  | Returns non-zero if the parameter is printable character (including whitespace) |
+| std::ispunct(int)  | Returns non-zero if the parameter is neither alphanumeric nor whitespace        |
+| std::isspace(int)  | Returns non-zero if the parameter is whitespace                                 |
+| std::isxdigit(int) | Returns non-zero if the parameter is a hexadecimal digit (0-9, a-f, A-F)        |
+
+*** String validation
+When it comes to variable length inputs, the best way to validate strings (besides using a regular expression library) is to step through each character of the string and ensure it meets the validation criteria. That’s exactly what we’ll do here, or better, that’s what std::all_of does for us.
+Note that this code isn’t perfect: the user could say their name was “asf w jweo s di we ao” or some other bit of gibberish, or even worse, just a bunch of spaces. We could address this somewhat by refining our validation criteria to only accept strings that contain at least one character and at most one space.
+#+begin_src cpp
+#include <algorithm> // std::all_of
+#include <cctype> // std::isalpha, std::isspace
+#include <iostream>
+#include <ranges>
+#include <string>
+#include <string_view>
+
+bool isValidName(std::string_view name)
+{
+  return std::ranges::all_of(name, [](char ch) {
+    return std::isalpha(ch) || std::isspace(ch);
+  });
+
+  // Before C++20, without ranges
+  // return std::all_of(name.begin(), name.end(), [](char ch) {
+  //    return std::isalpha(ch) || std::isspace(ch);
+  // });
+}
+
+int main()
+{
+  std::string name{};
+
+  do
+  {
+    std::cout << "Enter your name: ";
+    std::getline(std::cin, name); // get the entire line, including spaces
+  } while (!isValidName(name));
+
+  std::cout << "Hello " << name << "!\n";
+}
+#+end_src
+
+*** Numeric validation
+#+begin_src cpp :main no
+#include <iostream>
+#include <limits>
+
+int main()
+{
+    int age{};
+
+    while (true)
+    {
+        std::cout << "Enter your age: ";
+        std::cin >> age;
+
+        if (std::cin.fail()) // no extraction took place
+        {
+            std::cin.clear(); // reset the state bits back to goodbit so we can use ignore()
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // clear out the bad input from the stream
+            continue; // try again
+        }
+
+        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n'); // clear out any additional input from the stream
+        if (std::cin.gcount() > 1) // if we cleared out more than one additional character
+        {
+            continue; // we'll consider this input to be invalid
+        }
+
+        if (age <= 0) // make sure age is positive
+        {
+            continue;
+        }
+
+        break;
+    }
+
+    std::cout << "You entered: " << age << '\n';
+}
+#+end_src
+
+*** Numeric validation as a string
+#+begin_src cpp
+#include <charconv> // std::from_chars
+#include <iostream>
+#include <limits>
+#include <optional>
+#include <string>
+#include <string_view>
+
+// std::optional<int> returns either an int or nothing
+std::optional<int> extractAge(std::string_view age)
+{
+    int result{};
+    const auto end{ age.data() + age.length() }; // get end iterator of underlying C-style string
+
+    // Try to parse an int from age
+    // If we got an error of some kind...
+    if (std::from_chars(age.data(), end, result).ec != std::errc{})
+    {
+        return {}; // return nothing
+    }
+
+    if (result <= 0) // make sure age is positive
+    {
+        return {}; // return nothing
+    }
+
+    return result; // return an int value
+}
+
+int main()
+{
+    int age{};
+
+    while (true)
+    {
+        std::cout << "Enter your age: ";
+        std::string strAge{};
+
+        // Try to get a line of input
+        if (!std::getline(std::cin >> std::ws, strAge))
+        {
+            // If we failed, clean up and try again
+            std::cin.clear();
+            std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
+            continue;
+        }
+
+        // Try to extract the age
+        auto extracted{ extractAge(strAge) };
+
+        // If we failed, try again
+        if (!extracted)
+            continue;
+
+        age = *extracted; // get the value
+        break;
+    }
+
+  std::cout << "You entered: " << age << '\n';
+}
+#+end_src
+
+** Basic file I/O
+*** File output
+#+begin_src cpp :main no
+#include <fstream>
+#include <iostream>
+
+int main()
+{
+    // ofstream is used for writing files
+    // We'll make a file called Sample.txt
+    std::ofstream outf{ "Sample.txt" };
+
+    // If we couldn't open the output file stream for writing
+    if (!outf)
+    {
+        // Print an error and exit
+        std::cerr << "Uh oh, Sample.txt could not be opened for writing!\n";
+        return 1;
+    }
+
+    // We'll write two lines into this file
+    outf << "This is line 1\n";
+    outf << "This is line 2\n";
+
+    return 0;
+
+    // When outf goes out of scope, the ofstream
+    // destructor will close the file
+}
+#+end_src
+*** File input
+#+begin_src cpp :main no
+#include <fstream>
+#include <iostream>
+#include <string>
+
+int main()
+{
+    // ifstream is used for reading files
+    // We'll read from a file called Sample.txt
+    std::ifstream inf{ "Sample.txt" };
+
+    // If we couldn't open the input file stream for reading
+    if (!inf)
+    {
+        // Print an error and exit
+        std::cerr << "Uh oh, Sample.txt could not be opened for reading!\n";
+        return 1;
+    }
+
+    // While there's still stuff left to read
+    std::string strInput{};
+    while (std::getline(inf, strInput))
+	std::cout << strInput << '\n';
+
+    return 0;
+
+    // When inf goes out of scope, the ifstream
+    // destructor will close the file
+}
+#+end_src
+*** File modes
+| Ios file mode | Meaning                                              |
+|---------------+------------------------------------------------------|
+| app           | Opens the file in append mode                        |
+| ate           | Seeks to the end of the file before reading/writing  |
+| binary        | Opens the file in binary mode (instead of text mode) |
+| in            | Opens the file in read mode (default for ifstream)   |
+| out           | Opens the file in write mode (default for ofstream)  |
+| trunc         | Erases the file if it already exists                 |
+
+It is possible to specify multiple flags by bitwise ORing them together (using the | operator). ifstream defaults to std::ios::in file mode. ofstream defaults to std::ios::out file mode. And fstream defaults to std::ios::in | std::ios::out file mode, meaning you can both read and write by default.
+
+Due to the way fstream was designed, it may fail if std::ios::in is used and the file being opened does not exist. If you need to create a new file using fstream, use std::ios::out mode only.
+
+#+begin_src cpp
+#include <iostream>
+#include <fstream>
+
+int main()
+{
+    // We'll pass the ios:app flag to tell the ofstream to append
+    // rather than rewrite the file. We do not need to pass in std::ios::out
+    // because ofstream defaults to std::ios::out
+    std::ofstream outf{ "Sample.txt", std::ios::app };
+
+    // If we couldn't open the output file stream for writing
+    if (!outf)
+    {
+        // Print an error and exit
+        std::cerr << "Uh oh, Sample.txt could not be opened for writing!\n";
+        return 1;
+    }
+
+    outf << "This is line 3\n";
+    outf << "This is line 4\n";
+
+    return 0;
+
+    // When outf goes out of scope, the ofstream
+    // destructor will close the file
+}
+#+end_src
+*** Explicitly opening files using open()
+#+begin_src cpp
+std::ofstream outf{ "Sample.txt" };
+outf << "This is line 1\n";
+outf << "This is line 2\n";
+outf.close(); // explicitly close the file
+
+// Oops, we forgot something
+outf.open("Sample.txt", std::ios::app);
+outf << "This is line 3\n";
+outf.close();
+#+end_src
+** Random file I/O
+*** The file pointer
+Each file stream class contains a file pointer that is used to keep track of the current read/write position within the file. When something is read from or written to a file, the reading/writing happens at the file pointer’s current location. By default, when opening a file for reading or writing, the file pointer is set to the beginning of the file. However, if a file is opened in append mode, the file pointer is moved to the end of the file, so that writing does not overwrite any of the current contents of the file.
+
+*** Random file access with seekg() and seekp()
+| Ios seek flag | Meaning                                                            |
+|---------------+--------------------------------------------------------------------|
+| beg           | The offset is relative to the beginning of the file (default)      |
+| cur           | The offset is relative to the current location of the file pointer |
+| end           | The offset is relative to the end of the file                      |
+
+#+begin_src cpp
+inf.seekg(14, std::ios::cur); // move forward 14 bytes
+inf.seekg(-18, std::ios::cur); // move backwards 18 bytes
+inf.seekg(22, std::ios::beg); // move to 22nd byte in file
+inf.seekg(24); // move to 24th byte in file
+inf.seekg(-28, std::ios::end); // move to the 28th byte before end of the file
+inf.seekg(0, std::ios::beg); // move to beginning of file
+inf.seekg(0, std::ios::end); // move to end of file
+#+end_src
+
+In a text file, seeking to a position other than the beginning of the file may result in unexpected behavior.
+
+In programming, a newline (‘\n’) is actually an abstraction.
+
+- On Windows, a newline is represented as sequential CR (carriage return) and LF (line feed) characters (thus taking 2 bytes of storage).
+- On Unix, a newline is represented as a LF (line feed) character (thus taking 1 byte of storage).
+Seeking past a newline in either direction takes a variable number of bytes depending on how the file was encoded, which means results will vary depending on which encoding is used.
+
+Also on some operating systems, files may be padded with trailing zero bytes (bytes that have value 0). Seeking to the end of the file (or an offset from the end of the file) will produce different results on such files.
+
+#+begin_src cpp :main no
+#include <fstream>
+#include <iostream>
+#include <string>
+
+int main()
+{
+    std::ifstream inf{ "Sample.txt" };
+
+    // If we couldn't open the input file stream for reading
+    if (!inf)
+    {
+        // Print an error and exit
+        std::cerr << "Uh oh, Sample.txt could not be opened for reading!\n";
+        return 1;
+    }
+
+    std::string strData;
+
+    inf.seekg(5); // move to 5th character
+    // Get the rest of the line and print it, moving to line 2
+    std::getline(inf, strData);
+    std::cout << strData << '\n';
+
+    inf.seekg(8, std::ios::cur); // move 8 more bytes into file
+    // Get rest of the line and print it
+    std::getline(inf, strData);
+    std::cout << strData << '\n';
+
+    inf.seekg(-14, std::ios::end); // move 14 bytes before end of file
+    // Get rest of the line and print it
+    std::getline(inf, strData); // undefined behavior
+    std::cout << strData << '\n';
+
+    return 0;
+}
+#+end_src
+
+seekg() and seekp() are better used on binary files. You can open the above file in binary mode via:
+#+begin_src cpp
+std::ifstream inf {"Sample.txt", std::ifstream::binary};
+#+end_src
+
+Two other useful functions are tellg() and tellp(), which return the absolute position of the file pointer. This can be used to determine the size of a file:
+#+begin_src cpp
+std::ifstream inf {"Sample.txt"};
+inf.seekg(0, std::ios::end); // move to end of file
+std::cout << inf.tellg();
+#+end_src
+
+*** Reading and writing a file at the same time using fstream 
+The fstream class is capable of both reading and writing a file at the same time -- almost! The big caveat here is that it is not possible to switch between reading and writing arbitrarily. Once a read or write has taken place, the only way to switch between the two is to perform an operation that modifies the file position (e.g. a seek). If you don’t actually want to move the file pointer (because it’s already in the spot you want), you can always seek to the current position:
+#+begin_src cpp
+// assume iofile is an object of type fstream
+iofile.seekg(iofile.tellg(), std::ios::beg); // seek to current file position
+#+end_src
+
+If you do not do this, any number of strange and bizarre things may occur.
+
+(Note: Although it may seem that iofile.seekg(0, std::ios::cur) would also work, it appears some compilers may optimize this away).
+
+One other bit of trickiness: Unlike ifstream, where we could say while (inf) to determine if there was more to read, this will not work with fstream.
+
+Let’s do a file I/O example using fstream. We’re going to write a program that opens a file, reads its contents, and changes any vowels it finds to a ‘#’ symbol.
+
+#+begin_src cpp :main no
+#include <fstream>
+#include <iostream>
+#include <string>
+
+int main()
+{
+    // Note we have to specify both in and out because we're using fstream
+    std::fstream iofile{ "Sample.txt", std::ios::in | std::ios::out };
+
+    // If we couldn't open iofile, print an error
+    if (!iofile)
+    {
+        // Print an error and exit
+        std::cerr << "Uh oh, Sample.txt could not be opened!\n";
+        return 1;
+    }
+
+    char chChar{}; // we're going to do this character by character
+
+    // While there's still data to process
+    while (iofile.get(chChar))
+    {
+        switch (chChar)
+        {
+            // If we find a vowel
+            case 'a':
+            case 'e':
+            case 'i':
+            case 'o':
+            case 'u':
+            case 'A':
+            case 'E':
+            case 'I':
+            case 'O':
+            case 'U':
+
+                // Back up one character
+                iofile.seekg(-1, std::ios::cur);
+
+                // Because we did a seek, we can now safely do a write, so
+                // let's write a # over the vowel
+                iofile << '#';
+
+                // Now we want to go back to read mode so the next call
+                // to get() will perform correctly.  We'll seekg() to the current
+                // location because we don't want to move the file pointer.
+                iofile.seekg(iofile.tellg(), std::ios::beg);
+
+                break;
+        }
+    }
+
+    return 0;
+}
+#+end_src
+
+*** Other useful file functions
+To delete a file, simply use the remove() function.
+
+Also, the is_open() function will return true if the stream is currently open, and false otherwise.
+*** A warning about writing pointers to disk
+Do not write memory addresses to files. The variables that were originally at those addresses may be at different addresses when you read their values back in from disk, and the addresses will be invalid.
+
 * Next
-https://www.learncpp.com/cpp-tutorial/chapter-26-summary-and-quiz/
+https://www.learncpp.com/cpp-tutorial/a1-static-and-dynamic-libraries/
